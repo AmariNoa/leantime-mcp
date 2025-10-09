@@ -161,6 +161,14 @@ class LeantimeClient:
         params = {"values": values}
         return await self.call("leantime.rpc.Tickets.Tickets.updateTicket", params)
     
+    async def get_status_labels(self) -> dict:
+        """Get all available ticket status labels with their IDs.
+        
+        Returns:
+            A dictionary mapping status IDs to their labels
+        """
+        return await self.call("leantime.rpc.Tickets.Tickets.getStatusLabels")
+    
     async def get_user(self, user_id: int) -> dict:
         """Get user details by ID."""
         return await self.call("leantime.rpc.Users.getUser", {"id": user_id})

@@ -115,6 +115,9 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             project_id = arguments.pop("project_id")
             result = await client.update_ticket(ticket_id, project_id, **arguments)
         
+        elif name == "get_status_labels":
+            result = await client.get_status_labels()
+        
         elif name == "get_user":
             result = await client.get_user(arguments["user_id"])
         

@@ -161,6 +161,14 @@ TOOLS = [
         }
     ),
     Tool(
+        name="get_status_labels",
+        description="Get all available ticket status labels with their IDs. Use this to find out what status ID corresponds to what status name (e.g., Open, In Progress, Done, etc.)",
+        inputSchema={
+            "type": "object",
+            "properties": {}
+        }
+    ),
+    Tool(
         name="get_user",
         description="Get details of a specific user by ID",
         inputSchema={
