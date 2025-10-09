@@ -39,6 +39,7 @@ def get_client() -> LeantimeClient:
         # Get configuration from environment
         leantime_url = os.getenv("LEANTIME_URL")
         leantime_api_key = os.getenv("LEANTIME_API_KEY")
+        leantime_user_email = os.getenv("LEANTIME_USER_EMAIL")
         
         if not leantime_url:
             raise ValueError(
@@ -49,6 +50,12 @@ def get_client() -> LeantimeClient:
         if not leantime_api_key:
             raise ValueError(
                 "LEANTIME_API_KEY environment variable is required. "
+                "Please set it in your .env file or environment."
+            )
+        
+        if not leantime_user_email:
+            raise ValueError(
+                "LEANTIME_USER_EMAIL environment variable is required. "
                 "Please set it in your .env file or environment."
             )
         
@@ -95,6 +102,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await client.create_ticket(
                 headline=arguments["headline"],
                 project_id=arguments["project_id"],
+                user_id=arguments["user_id"],
+                date=arguments.get("date"),
                 description=arguments.get("description"),
                 status=arguments.get("status"),
                 priority=arguments.get("priority"),

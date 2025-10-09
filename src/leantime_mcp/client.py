@@ -120,9 +120,29 @@ class LeantimeClient:
             params["projectId"] = project_id
         return await self.call("leantime.rpc.Tickets.getAll", params)
     
-    async def create_ticket(self, headline: str, project_id: int, **kwargs) -> dict:
-        """Create a new ticket."""
-        params = {"headline": headline, "projectId": project_id, **kwargs}
+    async def create_ticket(self, headline: str, project_id: int, user_id: int, date: Optional[str] = None, **kwargs) -> dict:
+        """Create a new ticket.
+        
+        Args:
+            headline: Title/headline of the ticket
+            project_id: Project ID where the ticket will be created
+            user_id: The ID of the user creating the ticket
+            date: The date when the ticket is created (YYYY-MM-DD format). Defaults to current date if not provided.
+            **kwargs: Additional parameters
+        """
+        from datetime import datetime
+        
+        # Use current date if none provided
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+        
+        params = {
+            "headline": headline, 
+            "projectId": project_id,
+            "userId": user_id,
+            "date": date,
+            **kwargs
+        }
         return await self.call("leantime.rpc.Tickets.addTicket", params)
     
     async def update_ticket(self, ticket_id: int, **kwargs) -> dict:
@@ -137,6 +157,10 @@ class LeantimeClient:
     async def list_users(self) -> list:
         """List all users."""
         return await self.call("leantime.rpc.Users.getAll")
+    
+    async def get_user_by_email(self, email: str) -> dict:
+        """Get user details by email address."""
+        return await self.call("leantime.rpc.Users.Users.getUserByEmail", {"email": email})
     
     async def add_comment(self, module: str, module_id: int, comment: str) -> dict:
         """Add a comment to a module (e.g., ticket, project)."""

@@ -29,7 +29,8 @@ To use with Claude Desktop or other MCP clients, add to your MCP settings:
       ],
       "env": {
         "LEANTIME_URL": "https://your-leantime-instance.com",
-        "LEANTIME_API_KEY": "your_api_key_here"
+        "LEANTIME_API_KEY": "your_api_key_here",
+        "LEANTIME_USER_EMAIL": "your_email@example.com"
       }
     }
   }

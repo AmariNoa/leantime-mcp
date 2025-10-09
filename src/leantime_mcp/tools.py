@@ -94,6 +94,14 @@ TOOLS = [
                     "type": "integer",
                     "description": "Project ID where the ticket will be created"
                 },
+                "user_id": {
+                    "type": "integer",
+                    "description": "The ID of the user creating the ticket"
+                },
+                "date": {
+                    "type": "string",
+                    "description": "The date when the ticket is created (YYYY-MM-DD format)"
+                },
                 "description": {
                     "type": "string",
                     "description": "Detailed description of the ticket"
@@ -111,7 +119,7 @@ TOOLS = [
                     "description": "User ID to assign the ticket to"
                 }
             },
-            "required": ["headline", "project_id"]
+            "required": ["headline", "project_id", "user_id"]
         }
     ),
     Tool(
