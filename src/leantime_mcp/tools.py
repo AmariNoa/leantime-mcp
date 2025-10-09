@@ -132,6 +132,10 @@ TOOLS = [
                     "type": "integer",
                     "description": "ID of the ticket to update"
                 },
+                "project_id": {
+                    "type": "integer",
+                    "description": "Project ID where the ticket belongs"
+                },
                 "headline": {
                     "type": "string",
                     "description": "New title/headline"
@@ -153,7 +157,7 @@ TOOLS = [
                     "description": "New assignee user ID"
                 }
             },
-            "required": ["ticket_id"]
+            "required": ["ticket_id", "project_id"]
         }
     ),
     Tool(

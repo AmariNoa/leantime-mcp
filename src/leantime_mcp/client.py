@@ -149,9 +149,15 @@ class LeantimeClient:
         params = {"values": values}
         return await self.call("leantime.rpc.Tickets.Tickets.addTicket", params)
     
-    async def update_ticket(self, ticket_id: int, **kwargs) -> dict:
-        """Update an existing ticket."""
-        values = {"id": ticket_id, **kwargs}
+    async def update_ticket(self, ticket_id: int, project_id: int, **kwargs) -> dict:
+        """Update an existing ticket.
+        
+        Args:
+            ticket_id: The ID of the ticket to update
+            project_id: The project ID where the ticket belongs
+            **kwargs: Additional parameters to update
+        """
+        values = {"id": ticket_id, "projectId": project_id, **kwargs}
         params = {"values": values}
         return await self.call("leantime.rpc.Tickets.Tickets.updateTicket", params)
     
