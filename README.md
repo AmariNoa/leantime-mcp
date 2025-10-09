@@ -81,7 +81,7 @@ uv run leantime-mcp
 ## Links
 
 - [Leantime](https://leantime.io/)
-- [Leantime API Documentation](https://docs.leantime.io/api/)
+- [Leantime API Documentation](https://docs.leantime.io/api/README)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
 - [MCP Specification](https://spec.modelcontextprotocol.io/)
 
