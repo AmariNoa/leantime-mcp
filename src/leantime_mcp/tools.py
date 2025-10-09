@@ -117,6 +117,10 @@ TOOLS = [
                 "assignedTo": {
                     "type": "integer",
                     "description": "User ID to assign the ticket to"
+                },
+                "tags": {
+                    "type": "string",
+                    "description": "Comma-separated list of tags to add to the ticket"
                 }
             },
             "required": ["headline", "project_id", "user_id"]

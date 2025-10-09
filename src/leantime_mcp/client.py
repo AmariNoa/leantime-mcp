@@ -121,7 +121,7 @@ class LeantimeClient:
         params = {"searchCriteria": searchCriteria}
         return await self.call("leantime.rpc.Tickets.Tickets.getAll", params)
     
-    async def create_ticket(self, headline: str, project_id: int, user_id: int, date: Optional[str] = None, **kwargs) -> dict:
+    async def create_ticket(self, headline: str, project_id: int, user_id: int, date: Optional[str] = None, tags: Optional[str] = None, **kwargs) -> dict:
         """Create a new ticket.
         
         Args:
@@ -129,6 +129,7 @@ class LeantimeClient:
             project_id: Project ID where the ticket will be created
             user_id: The ID of the user creating the ticket
             date: The date when the ticket is created (YYYY-MM-DD format). Defaults to current date if not provided.
+            tags: Comma-separated list of tags to add to the ticket
             **kwargs: Additional parameters
         """
         from datetime import datetime
@@ -145,6 +146,10 @@ class LeantimeClient:
             "date": date,
             **kwargs
         }
+        
+        # Add tags if provided
+        if tags is not None:
+            values["tags"] = tags
         
         params = {"values": values}
         return await self.call("leantime.rpc.Tickets.Tickets.addTicket", params)

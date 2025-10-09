@@ -107,7 +107,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 description=arguments.get("description"),
                 status=arguments.get("status"),
                 priority=arguments.get("priority"),
-                assignedTo=arguments.get("assignedTo")
+                assignedTo=arguments.get("assignedTo"),
+                tags=arguments.get("tags")
             )
         
         elif name == "update_ticket":
