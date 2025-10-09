@@ -111,14 +111,14 @@ class LeantimeClient:
     
     async def get_ticket(self, ticket_id: int) -> dict:
         """Get ticket details by ID."""
-        return await self.call("leantime.rpc.Tickets.getTicket", {"id": ticket_id})
+        return await self.call("leantime.rpc.Tickets.Tickets.getTicket", {"id": ticket_id})
     
     async def list_tickets(self, project_id: Optional[int] = None) -> list:
         """List tickets, optionally filtered by project."""
         params = {}
         if project_id:
-            params["projectId"] = project_id
-        return await self.call("leantime.rpc.Tickets.getAll", params)
+            params["searchCriteria"] = {"projectId": project_id}
+        return await self.call("leantime.rpc.Tickets.Tickets.getAll", params)
     
     async def create_ticket(self, headline: str, project_id: int, user_id: int, date: Optional[str] = None, **kwargs) -> dict:
         """Create a new ticket.
@@ -136,19 +136,23 @@ class LeantimeClient:
         if date is None:
             date = datetime.now().strftime("%Y-%m-%d")
         
-        params = {
+        # The API expects a 'values' parameter containing the ticket data
+        values = {
             "headline": headline, 
             "projectId": project_id,
             "userId": user_id,
             "date": date,
             **kwargs
         }
-        return await self.call("leantime.rpc.Tickets.addTicket", params)
+        
+        params = {"values": values}
+        return await self.call("leantime.rpc.Tickets.Tickets.addTicket", params)
     
     async def update_ticket(self, ticket_id: int, **kwargs) -> dict:
         """Update an existing ticket."""
-        params = {"id": ticket_id, **kwargs}
-        return await self.call("leantime.rpc.Tickets.updateTicket", params)
+        values = {"id": ticket_id, **kwargs}
+        params = {"values": values}
+        return await self.call("leantime.rpc.Tickets.Tickets.updateTicket", params)
     
     async def get_user(self, user_id: int) -> dict:
         """Get user details by ID."""
