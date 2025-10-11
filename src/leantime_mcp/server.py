@@ -69,61 +69,41 @@ def get_client() -> LeantimeClient:
 @app.tool()
 async def get_project(project_id: int) -> str:
     """Get details of a specific project by ID."""
-    try:
-        client = get_client()
-        result = await client.get_project(project_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting project: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_project(project_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def list_projects() -> str:
     """List all projects accessible to the user."""
-    try:
-        client = get_client()
-        result = await client.list_projects()
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error listing projects: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.list_projects()
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def create_project(name: str, details: str = None, clientId: int = None) -> str:
     """Create a new project."""
-    try:
-        client = get_client()
-        result = await client.create_project(name=name, details=details, clientId=clientId)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error creating project: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.create_project(name=name, details=details, clientId=clientId)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def get_ticket(ticket_id: int) -> str:
     """Get details of a specific ticket by ID."""
-    try:
-        client = get_client()
-        result = await client.get_ticket(ticket_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting ticket: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_ticket(ticket_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def list_tickets(project_id: int = None) -> str:
     """List tickets, optionally filtered by project ID."""
-    try:
-        client = get_client()
-        result = await client.list_tickets(project_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error listing tickets: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.list_tickets(project_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
@@ -131,141 +111,101 @@ async def create_ticket(headline: str, project_id: int, user_id: int, date: str 
                        description: str = None, status: str = None, priority: str = None,
                        assignedTo: str = None, tags: str = None) -> str:
     """Create a new ticket."""
-    try:
-        client = get_client()
-        result = await client.create_ticket(
-            headline=headline, project_id=project_id, user_id=user_id, date=date,
-            description=description, status=status, priority=priority,
-            assignedTo=assignedTo, tags=tags
-        )
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error creating ticket: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.create_ticket(
+        headline=headline, project_id=project_id, user_id=user_id, date=date,
+        description=description, status=status, priority=priority,
+        assignedTo=assignedTo, tags=tags
+    )
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def update_ticket(ticket_id: int, project_id: int, headline: str = None, description: str = None, 
                        status: int = None, priority: str = None, assignedTo: int = None) -> str:
     """Update an existing ticket."""
-    try:
-        client = get_client()
-        # Build kwargs from non-None parameters
-        kwargs = {}
-        if headline is not None:
-            kwargs['headline'] = headline
-        if description is not None:
-            kwargs['description'] = description
-        if status is not None:
-            kwargs['status'] = status
-        if priority is not None:
-            kwargs['priority'] = priority
-        if assignedTo is not None:
-            kwargs['assignedTo'] = assignedTo
-        
-        result = await client.update_ticket(ticket_id, project_id, **kwargs)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error updating ticket: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    # Build kwargs from non-None parameters
+    kwargs = {}
+    if headline is not None:
+        kwargs['headline'] = headline
+    if description is not None:
+        kwargs['description'] = description
+    if status is not None:
+        kwargs['status'] = status
+    if priority is not None:
+        kwargs['priority'] = priority
+    if assignedTo is not None:
+        kwargs['assignedTo'] = assignedTo
+    
+    result = await client.update_ticket(ticket_id, project_id, **kwargs)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def get_status_labels() -> str:
     """Get available status labels."""
-    try:
-        client = get_client()
-        result = await client.get_status_labels()
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting status labels: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_status_labels()
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def get_user(user_id: int) -> str:
     """Get details of a specific user by ID."""
-    try:
-        client = get_client()
-        result = await client.get_user(user_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting user: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_user(user_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def list_users() -> str:
     """List all users."""
-    try:
-        client = get_client()
-        result = await client.list_users()
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error listing users: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.list_users()
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def add_comment(module: str, module_id: int, comment: str) -> str:
     """Add a comment to a module (ticket, project, etc.)."""
-    try:
-        client = get_client()
-        result = await client.add_comment(module=module, module_id=module_id, comment=comment)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error adding comment: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.add_comment(module=module, module_id=module_id, comment=comment)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def get_comments(module: str, module_id: int) -> str:
     """Get comments for a module (ticket, project, etc.)."""
-    try:
-        client = get_client()
-        result = await client.get_comments(module=module, module_id=module_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting comments: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_comments(module=module, module_id=module_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def add_timesheet(user_id: int, ticket_id: int, hours: float, date: str, description: str = None) -> str:
     """Add a timesheet entry."""
-    try:
-        client = get_client()
-        result = await client.add_timesheet(
-            user_id=user_id, ticket_id=ticket_id, hours=hours, date=date, description=description
-        )
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error adding timesheet: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.add_timesheet(
+        user_id=user_id, ticket_id=ticket_id, hours=hours, date=date, description=description
+    )
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def get_timesheets(project_id: int = None, user_id: int = None) -> str:
     """Get timesheets, optionally filtered by project or user."""
-    try:
-        client = get_client()
-        result = await client.get_timesheets(project_id=project_id, user_id=user_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting timesheets: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_timesheets(project_id=project_id, user_id=user_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
 async def get_all_subtasks(ticket_id: int) -> str:
     """Get all subtasks for a ticket."""
-    try:
-        client = get_client()
-        result = await client.get_all_subtasks(ticket_id)
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error getting subtasks: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.get_all_subtasks(ticket_id)
+    return json.dumps(result, indent=2)
 
 
 @app.tool()
@@ -273,17 +213,13 @@ async def upsert_subtask(parent_ticket: int, headline: str,
                         date: str = None, description: str = None, status: str = None,
                         priority: str = None, assignedTo: str = None, tags: str = None) -> str:
     """Create or update a subtask."""
-    try:
-        client = get_client()
-        result = await client.upsert_subtask(
-            parent_ticket_id=parent_ticket, headline=headline,
-            date=date, description=description, status=status, priority=priority,
-            assignedTo=assignedTo, tags=tags
-        )
-        return json.dumps(result, indent=2)
-    except Exception as e:
-        logger.error(f"Error upserting subtask: {e}")
-        return f"Error: {str(e)}"
+    client = get_client()
+    result = await client.upsert_subtask(
+        parent_ticket_id=parent_ticket, headline=headline,
+        date=date, description=description, status=status, priority=priority,
+        assignedTo=assignedTo, tags=tags
+    )
+    return json.dumps(result, indent=2)
 
 
 def main():
