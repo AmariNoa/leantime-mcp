@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: 2025 Daniel Eder
+# SPDX-FileCopyrightText: 2026 AmariNoa
 #
 # SPDX-License-Identifier: MIT
+#
+# Modified by AmariNoa: corrected the Comments RPC parameter names
+# (entityId / values.text) so add_comment and get_comments match Leantime's
+# JSON-RPC method signatures.
 
 """Leantime JSON-RPC 2.0 client implementation."""
 

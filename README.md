@@ -6,6 +6,8 @@ SPDX-License-Identifier: CC0-1.0
 
 # Leantime MCP Server
 
+> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. All original copyrights and the MIT license are retained.
+
 A Model Context Protocol (MCP) server that provides AI assistants with access to Leantime's (leantime.io) JsonRPC 2.0 API. This enables AI tools like Claude to interact with Leantime projects, tickets, timesheets, users, and more through a standardized interface.
 
 This server uses [FastMCP](https://github.com/jlowin/fastmcp) which supports multiple transport protocols including stdio, HTTP, WebSocket, and SSE, making it suitable for various deployment scenarios.
@@ -30,7 +32,7 @@ For local MCP clients like Claude Desktop that communicate via standard input/ou
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/daniel-eder/leantime-mcp.git",
+        "git+https://github.com/AmariNoa/leantime-mcp.git",
         "leantime-mcp"
       ],
       "env": {
@@ -154,7 +156,7 @@ The server provides the following MCP tools:
 
 ```bash
 # Clone the repository
-git clone https://github.com/daniel-eder/leantime-mcp.git
+git clone https://github.com/AmariNoa/leantime-mcp.git
 cd leantime-mcp
 
 # Sync dependencies (includes dev dependencies)
