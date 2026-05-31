@@ -5,7 +5,8 @@
 #
 # Modified by AmariNoa: corrected the Comments RPC parameter names
 # (entityId / values.text) so add_comment and get_comments match Leantime's
-# JSON-RPC method signatures.
+# JSON-RPC method signatures. Added whoami (Auth.getUserId) and per-process
+# caches for the acting user and email->id lookups.
 
 """Leantime JSON-RPC 2.0 client implementation."""
 
@@ -40,6 +41,11 @@ class LeantimeClient:
         self.api_key = api_key
         self.endpoint = f"{self.base_url}/api/jsonrpc"
         self._request_id = 0
+        # Per-process caches. The acting user (the API key's owner) never
+        # changes for the life of the process, and email->id mappings are
+        # effectively immutable too, so we resolve each at most once.
+        self._self_user_id: Optional[int] = None
+        self._email_id_cache: dict[str, Optional[int]] = {}
     
     def _get_next_id(self) -> int:
         """Get next JSON-RPC request ID."""
@@ -283,6 +289,30 @@ class LeantimeClient:
     async def get_user_by_email(self, email: str) -> dict:
         """Get user details by email address."""
         return await self.call("leantime.rpc.Users.Users.getUserByEmail", {"email": email})
+
+    async def whoami(self) -> int:
+        """Return the acting user's ID (the user that owns the API key).
+
+        Resolved server-side from the API key via Auth.getUserId, so no user
+        ID or email needs to be configured. Cached for the life of the client
+        (the key's owner does not change).
+        """
+        if self._self_user_id is None:
+            result = await self.call("leantime.rpc.Auth.getUserId")
+            self._self_user_id = int(result)
+        return self._self_user_id
+
+    async def resolve_email_to_id(self, email: str) -> Optional[int]:
+        """Resolve an email address to a user ID, cached per process.
+
+        Returns None if the email does not map to a user.
+        """
+        if email not in self._email_id_cache:
+            user = await self.get_user_by_email(email)
+            self._email_id_cache[email] = (
+                user.get("id") if isinstance(user, dict) else None
+            )
+        return self._email_id_cache[email]
     
     async def add_comment(self, module: str, module_id: int, comment: str) -> dict:
         """Add a comment to a module (e.g., ticket, project)."""

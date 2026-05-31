@@ -6,10 +6,11 @@
 # Modified by AmariNoa: added tools for partial ticket updates (patch_ticket,
 # set_ticket_status, assign_ticket), deletion (delete_ticket, delete_comment,
 # delete_timesheet), milestones, project update/membership, comment editing,
-# and assorted read helpers. Added LEANTIME_ACTOR_USER_ID to pin the acting
-# user (the API key's owner) for whoami / my-tickets instead of resolving a
-# possibly-mismatched LEANTIME_USER_EMAIL, and redacted credential/session
-# fields from user responses.
+# and assorted read helpers. The acting user (bot) is now resolved server-side
+# from the API key via whoami (Auth.getUserId) with no ID/email configured;
+# LEANTIME_TARGET_USER_EMAIL names the human operating the agent (resolved to
+# an ID via email lookup) and is used as the default assignee for tickets the
+# bot creates. Credential/session fields are redacted from user responses.
 
 """Leantime MCP Server - Main server implementation."""
 
@@ -17,7 +18,7 @@ import os
 import sys
 import json
 import logging
-from typing import Any
+from typing import Any, Optional
 from dotenv import load_dotenv
 
 from fastmcp import FastMCP
@@ -46,8 +47,6 @@ def get_client() -> LeantimeClient:
         # Get configuration from environment
         leantime_url = os.getenv("LEANTIME_URL")
         leantime_api_key = os.getenv("LEANTIME_API_KEY")
-        leantime_actor_user_id = os.getenv("LEANTIME_ACTOR_USER_ID")
-        leantime_user_email = os.getenv("LEANTIME_USER_EMAIL")
 
         if not leantime_url:
             raise ValueError(
@@ -61,46 +60,34 @@ def get_client() -> LeantimeClient:
                 "Please set it in your .env file or environment."
             )
 
-        # Identity for read-side defaults (whoami / "my tickets"). Prefer the
-        # explicit numeric LEANTIME_ACTOR_USER_ID — it should be the user that
-        # OWNS the API key, so the acting identity is internally consistent.
-        # LEANTIME_USER_EMAIL is the legacy fallback; it resolves via a user
-        # lookup that may land on a DIFFERENT user than the token owner (e.g. a
-        # human admin), which is exactly the mix-up ACTOR_USER_ID avoids.
-        if not leantime_actor_user_id and not leantime_user_email:
-            raise ValueError(
-                "Set LEANTIME_ACTOR_USER_ID (recommended: the user ID that owns "
-                "the API key) or LEANTIME_USER_EMAIL. One is required to resolve "
-                "the acting user for whoami / my-tickets."
-            )
-
         leantime_client = LeantimeClient(leantime_url, leantime_api_key)
         logger.info(f"Initialized Leantime client for {leantime_url}")
-    
+
     return leantime_client
 
 
 async def _acting_user_id(client: LeantimeClient) -> int:
-    """Resolve the acting user ID for read-side defaults.
+    """Resolve the acting user — the bot that owns the API key.
 
-    Prefers the explicit numeric LEANTIME_ACTOR_USER_ID (which should be the
-    owner of the API key). Falls back to resolving LEANTIME_USER_EMAIL via a
-    user lookup. Raises ValueError if neither yields an ID.
+    Resolved server-side from the API key via Auth.getUserId (whoami), so no
+    user ID or email is configured for the acting identity. This is the user
+    that authors everything the agent writes.
     """
-    actor = os.getenv("LEANTIME_ACTOR_USER_ID")
-    if actor:
-        try:
-            return int(actor)
-        except ValueError as exc:
-            raise ValueError(
-                f"LEANTIME_ACTOR_USER_ID must be an integer, got {actor!r}"
-            ) from exc
-    email = os.getenv("LEANTIME_USER_EMAIL")
-    me = await client.get_user_by_email(email)
-    user_id = me.get("id") if isinstance(me, dict) else None
-    if user_id is None:
-        raise ValueError(f"Could not resolve user_id for {email}")
-    return int(user_id)
+    return await client.whoami()
+
+
+async def _target_user_id(client: LeantimeClient) -> Optional[int]:
+    """Resolve the configured human "target" user, or None if unset/unknown.
+
+    LEANTIME_TARGET_USER_EMAIL is the email of the person operating the agent
+    (their OIDC account). It is resolved to an ID via lookup — the ID is never
+    configured directly — and used as the default assignee for tickets the bot
+    creates on that person's behalf.
+    """
+    email = os.getenv("LEANTIME_TARGET_USER_EMAIL")
+    if not email:
+        return None
+    return await client.resolve_email_to_id(email)
 
 
 # Sensitive user fields never worth returning over MCP.
@@ -163,11 +150,21 @@ async def list_tickets(project_id: int = None) -> str:
 
 
 @app.tool()
-async def create_ticket(headline: str, project_id: int, user_id: int, date: str = None, 
+async def create_ticket(headline: str, project_id: int, user_id: int = None, date: str = None,
                        description: str = None, status: str = None, priority: str = None,
                        assignedTo: str = None, tags: str = None) -> str:
-    """Create a new ticket."""
+    """Create a new ticket.
+
+    Author (user_id) defaults to the acting bot (whoami) — you normally do not
+    pass it. Assignee (assignedTo) defaults to the configured human target
+    (LEANTIME_TARGET_USER_EMAIL), so tickets the bot creates are assigned to
+    the person operating the agent. Pass either explicitly to override.
+    """
     client = get_client()
+    if user_id is None:
+        user_id = await _acting_user_id(client)
+    if assignedTo is None:
+        assignedTo = await _target_user_id(client)
     result = await client.create_ticket(
         headline=headline, project_id=project_id, user_id=user_id, date=date,
         description=description, status=status, priority=priority,
@@ -362,9 +359,8 @@ async def delete_ticket(ticket_id: int) -> str:
 async def list_my_tickets(project_id: int, user_id: int = None) -> str:
     """List a user's open (not-done) tickets in a project.
 
-    If user_id is omitted, defaults to the acting user: LEANTIME_ACTOR_USER_ID
-    if set (recommended — the API key's owner), otherwise the user mapped to
-    LEANTIME_USER_EMAIL. Pass user_id explicitly to query someone else.
+    If user_id is omitted, defaults to the acting bot (whoami, resolved from
+    the API key). Pass user_id explicitly to query someone else.
     """
     client = get_client()
     if user_id is None:
@@ -468,16 +464,35 @@ async def get_priority_labels() -> str:
 
 @app.tool()
 async def get_current_user() -> str:
-    """Get the acting user.
-
-    Resolved from LEANTIME_ACTOR_USER_ID if set (recommended — the API key's
-    owner), otherwise from LEANTIME_USER_EMAIL.
-    """
+    """Get the acting user — the bot that owns the API key (via whoami)."""
     client = get_client()
     try:
         user_id = await _acting_user_id(client)
     except ValueError as exc:
         return json.dumps({"error": str(exc)}, indent=2)
+    result = await client.get_user(user_id)
+    return json.dumps(_redact_user(result), indent=2)
+
+
+@app.tool()
+async def get_target_user() -> str:
+    """Get the configured human target user (LEANTIME_TARGET_USER_EMAIL).
+
+    This is the person operating the agent (their OIDC account), resolved from
+    the configured email — used as the default assignee for tickets the bot
+    creates. Returns an error object if the email is unset or unknown.
+    """
+    client = get_client()
+    email = os.getenv("LEANTIME_TARGET_USER_EMAIL")
+    if not email:
+        return json.dumps(
+            {"error": "LEANTIME_TARGET_USER_EMAIL is not set."}, indent=2
+        )
+    user_id = await _target_user_id(client)
+    if user_id is None:
+        return json.dumps(
+            {"error": f"Could not resolve a user for {email}"}, indent=2
+        )
     result = await client.get_user(user_id)
     return json.dumps(_redact_user(result), indent=2)
 
