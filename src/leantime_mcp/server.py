@@ -82,12 +82,42 @@ async def _target_user_id(client: LeantimeClient) -> Optional[int]:
     LEANTIME_TARGET_USER_EMAIL is the email of the person operating the agent
     (their OIDC account). It is resolved to an ID via lookup — the ID is never
     configured directly — and used as the default assignee for tickets the bot
-    creates on that person's behalf.
+    creates on that person's behalf. Leaving it empty is valid: callers then
+    specify the assignee per call (by email or id), e.g. a shared Docker
+    deployment where the model picks the target user at call time.
     """
     email = os.getenv("LEANTIME_TARGET_USER_EMAIL")
     if not email:
         return None
     return await client.resolve_email_to_id(email)
+
+
+class _UnknownEmailError(Exception):
+    """Raised when an email cannot be resolved to a user."""
+
+
+async def _resolve_assignee(
+    client: LeantimeClient,
+    assigned_to: Optional[int],
+    assignee_email: Optional[str],
+    use_env_default: bool,
+) -> Optional[int]:
+    """Resolve a ticket assignee ID from the available inputs.
+
+    Precedence: explicit assignee_email > explicit assigned_to (id) >
+    configured LEANTIME_TARGET_USER_EMAIL (only when use_env_default) > None.
+    Raises _UnknownEmailError if an explicit email does not map to a user.
+    """
+    if assignee_email is not None:
+        resolved = await client.resolve_email_to_id(assignee_email)
+        if resolved is None:
+            raise _UnknownEmailError(assignee_email)
+        return resolved
+    if assigned_to is not None:
+        return assigned_to
+    if use_env_default:
+        return await _target_user_id(client)
+    return None
 
 
 # Sensitive user fields never worth returning over MCP.
@@ -152,19 +182,30 @@ async def list_tickets(project_id: int = None) -> str:
 @app.tool()
 async def create_ticket(headline: str, project_id: int, user_id: int = None, date: str = None,
                        description: str = None, status: str = None, priority: str = None,
-                       assignedTo: str = None, tags: str = None) -> str:
+                       assignedTo: int = None, assignee_email: str = None,
+                       tags: str = None) -> str:
     """Create a new ticket.
 
     Author (user_id) defaults to the acting bot (whoami) — you normally do not
-    pass it. Assignee (assignedTo) defaults to the configured human target
-    (LEANTIME_TARGET_USER_EMAIL), so tickets the bot creates are assigned to
-    the person operating the agent. Pass either explicitly to override.
+    pass it.
+
+    Assignee is chosen by precedence: assignee_email (resolved to an id) >
+    assignedTo (an id) > the configured LEANTIME_TARGET_USER_EMAIL > none. So
+    you can target a person per call by email — useful for a shared deployment
+    where LEANTIME_TARGET_USER_EMAIL is left empty and the caller names the
+    user each time.
     """
     client = get_client()
     if user_id is None:
         user_id = await _acting_user_id(client)
-    if assignedTo is None:
-        assignedTo = await _target_user_id(client)
+    try:
+        assignedTo = await _resolve_assignee(
+            client, assignedTo, assignee_email, use_env_default=True
+        )
+    except _UnknownEmailError as exc:
+        return json.dumps(
+            {"error": f"Could not resolve a user for {exc}"}, indent=2
+        )
     result = await client.create_ticket(
         headline=headline, project_id=project_id, user_id=user_id, date=date,
         description=description, status=status, priority=priority,
@@ -340,10 +381,27 @@ async def set_ticket_status(ticket_id: int, status: int) -> str:
 
 
 @app.tool()
-async def assign_ticket(ticket_id: int, assigned_to: int) -> str:
-    """Assign a ticket to a user (thin wrapper over patch_ticket)."""
+async def assign_ticket(ticket_id: int, assigned_to: int = None,
+                        assignee_email: str = None) -> str:
+    """Assign a ticket to a user, by id or by email.
+
+    Provide assignee_email (resolved to an id) or assigned_to (an id). If both
+    are given, the email wins.
+    """
     client = get_client()
-    result = await client.patch_ticket(ticket_id, {"editorId": assigned_to})
+    try:
+        target = await _resolve_assignee(
+            client, assigned_to, assignee_email, use_env_default=False
+        )
+    except _UnknownEmailError as exc:
+        return json.dumps(
+            {"error": f"Could not resolve a user for {exc}"}, indent=2
+        )
+    if target is None:
+        return json.dumps(
+            {"error": "Provide assigned_to (id) or assignee_email."}, indent=2
+        )
+    result = await client.patch_ticket(ticket_id, {"editorId": target})
     return json.dumps(result, indent=2)
 
 
@@ -489,6 +547,24 @@ async def get_target_user() -> str:
             {"error": "LEANTIME_TARGET_USER_EMAIL is not set."}, indent=2
         )
     user_id = await _target_user_id(client)
+    if user_id is None:
+        return json.dumps(
+            {"error": f"Could not resolve a user for {email}"}, indent=2
+        )
+    result = await client.get_user(user_id)
+    return json.dumps(_redact_user(result), indent=2)
+
+
+@app.tool()
+async def resolve_user(email: str) -> str:
+    """Resolve an email address to a user (id + safe profile fields).
+
+    Useful for picking a ticket assignee by email at call time, e.g. when no
+    LEANTIME_TARGET_USER_EMAIL is configured. Credential/session fields are
+    stripped. Returns an error object if the email maps to no user.
+    """
+    client = get_client()
+    user_id = await client.resolve_email_to_id(email)
     if user_id is None:
         return json.dumps(
             {"error": f"Could not resolve a user for {email}"}, indent=2

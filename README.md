@@ -70,6 +70,8 @@ There are two distinct identities, and **neither is configured as a user ID**:
 
 2. **The human target (optional).** `LEANTIME_TARGET_USER_EMAIL` is the email of the person operating the agent (their OIDC account). It is resolved to an ID via lookup — never set directly — and used as the **default assignee** for tickets the bot creates on that person's behalf. Inspect it with `get_target_user`. If unset, created tickets simply have no default assignee.
 
+**Per-call targeting.** You don't have to configure the target at all. `create_ticket` and `assign_ticket` accept an `assignee_email` argument that is resolved to a user ID at call time, and `resolve_user(email)` looks up a user by email on demand. This suits a shared deployment (e.g. one Docker container behind LM Studio) where `LEANTIME_TARGET_USER_EMAIL` is left empty and the caller names the target user per request. Assignee precedence: `assignee_email` > `assignedTo`/`assigned_to` (an id) > `LEANTIME_TARGET_USER_EMAIL` > none.
+
 Credential and session fields are stripped from all user responses.
 
 > **Per-user deployment:** generating a Leantime API key auto-creates a bot user (`source=api`, Editor role) that owns the key. For each person, issue a dedicated key (scoped to the right role/projects) and set `LEANTIME_API_KEY` to it plus `LEANTIME_TARGET_USER_EMAIL` to that person's email. The bot identifies itself via the key; the human is resolved from the email — so the same config shape works for everyone with no user IDs to manage.
@@ -194,6 +196,7 @@ The server provides the following MCP tools:
 - `list_users` - List all users
 - `get_current_user` - Get the acting user (the bot, via whoami from the API key)
 - `get_target_user` - Get the configured human target (`LEANTIME_TARGET_USER_EMAIL`)
+- `resolve_user` - Resolve an email address to a user (for per-call assignee targeting)
 
 
 ## Development
