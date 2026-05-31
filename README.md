@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC0-1.0
 
 # Leantime MCP Server
 
-> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. All original copyrights and the MIT license are retained.
+> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. This fork also adds tools for partial ticket updates (`patch_ticket`), deletion (`delete_ticket`, `delete_comment`, `delete_timesheet`), milestones, project updates/membership, comment editing, and assorted read helpers. All original copyrights and the MIT license are retained.
 
 A Model Context Protocol (MCP) server that provides AI assistants with access to Leantime's (leantime.io) JsonRPC 2.0 API. This enables AI tools like Claude to interact with Leantime projects, tickets, timesheets, users, and more through a standardized interface.
 
@@ -135,19 +135,50 @@ export LEANTIME_USER_EMAIL="your_email@example.com"
 
 The server provides the following MCP tools:
 
+**Projects**
 - `get_project` - Get details of a specific project
 - `list_projects` - List all accessible projects
 - `create_project` - Create a new project
+- `update_project` - Update an existing project (only the fields you pass)
+- `list_project_users` - List users assigned to a project
+
+**Tickets**
 - `get_ticket` - Get ticket/task details
 - `list_tickets` - List tickets (optionally filtered by project)
+- `list_my_tickets` - List a user's open tickets in a project
 - `create_ticket` - Create a new ticket
-- `update_ticket` - Update an existing ticket
-- `get_user` - Get user details
-- `list_users` - List all users
+- `update_ticket` - Update a ticket (full-save; blanks omitted fields)
+- `patch_ticket` - Partially update a ticket, changing ONLY the fields you pass (preferred)
+- `set_ticket_status` - Change only a ticket's status
+- `assign_ticket` - Assign a ticket to a user
+- `delete_ticket` - Delete a ticket
+- `get_status_labels` - Map status IDs to labels
+- `get_priority_labels` - Map priority IDs to labels
+- `get_ticket_types` - List available ticket types
+
+**Subtasks**
+- `get_all_subtasks` - List a ticket's subtasks
+- `upsert_subtask` - Create or update a subtask
+
+**Milestones**
+- `list_milestones` - List a project's milestones
+- `create_milestone` - Create a milestone
+
+**Comments**
 - `add_comment` - Add a comment to a ticket or project
 - `get_comments` - Get comments for a module
+- `edit_comment` - Edit a comment's text
+- `delete_comment` - Delete a comment
+
+**Timesheets**
 - `add_timesheet` - Log time to a ticket
 - `get_timesheets` - Query timesheet entries
+- `delete_timesheet` - Delete a timesheet entry (no update RPC; delete + re-add)
+
+**Users**
+- `get_user` - Get user details
+- `list_users` - List all users
+- `get_current_user` - Get the user mapped to `LEANTIME_USER_EMAIL`
 
 
 ## Development

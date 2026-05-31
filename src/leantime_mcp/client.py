@@ -113,6 +113,25 @@ class LeantimeClient:
         if details:
             params["details"] = details
         return await self.call("leantime.rpc.Projects.addProject", params)
+
+    async def update_project(self, project_id: int, fields: dict) -> Any:
+        """Update an existing project with the given fields.
+
+        Args:
+            project_id: The ID of the project to update
+            fields: Mapping of project columns to new values (name, details,
+                clientId, state, etc.)
+        """
+        values = {"id": project_id, **fields}
+        return await self.call(
+            "leantime.rpc.Projects.editProject", {"values": values, "id": project_id}
+        )
+
+    async def list_project_users(self, project_id: int) -> list:
+        """List users assigned to a project."""
+        return await self.call(
+            "leantime.rpc.Projects.getUsersAssignedToProject", {"projectId": project_id}
+        )
     
     async def get_ticket(self, ticket_id: int) -> dict:
         """Get ticket details by ID."""
@@ -161,7 +180,7 @@ class LeantimeClient:
     
     async def update_ticket(self, ticket_id: int, project_id: int, **kwargs) -> dict:
         """Update an existing ticket.
-        
+
         Args:
             ticket_id: The ID of the ticket to update
             project_id: The project ID where the ticket belongs
@@ -170,6 +189,80 @@ class LeantimeClient:
         values = {"id": ticket_id, "projectId": project_id, **kwargs}
         params = {"values": values}
         return await self.call("leantime.rpc.Tickets.Tickets.updateTicket", params)
+
+    async def patch_ticket(self, ticket_id: int, fields: dict) -> Any:
+        """Partially update a ticket, changing ONLY the given fields.
+
+        Unlike update_ticket (which re-saves the whole ticket and blanks any
+        field that is not supplied), this maps to Leantime's Tickets.patch,
+        which updates exactly the keys in ``fields`` and leaves the rest intact.
+
+        Args:
+            ticket_id: The ID of the ticket to patch
+            fields: Mapping of Leantime ticket columns to new values, e.g.
+                {"status": 3}, {"editorId": 7}, {"headline": "..."},
+                {"milestoneid": 12}, {"dateToFinish": "2026-06-30"}.
+        """
+        return await self.call(
+            "leantime.rpc.Tickets.Tickets.patch",
+            {"id": ticket_id, "params": fields},
+        )
+
+    async def delete_ticket(self, ticket_id: int) -> Any:
+        """Delete a ticket by ID."""
+        return await self.call("leantime.rpc.Tickets.Tickets.delete", {"id": ticket_id})
+
+    async def get_open_user_tickets(self, user_id: int, project_id: int) -> list:
+        """Get a user's open (not-done) tickets in a project."""
+        return await self.call(
+            "leantime.rpc.Tickets.Tickets.getOpenUserTicketsByProject",
+            {"userId": user_id, "projectId": project_id},
+        )
+
+    async def list_milestones(self, project_id: int) -> list:
+        """List milestones for a project."""
+        return await self.call(
+            "leantime.rpc.Tickets.Tickets.getAllMilestones",
+            {"searchCriteria": {"currentProject": project_id}},
+        )
+
+    async def create_milestone(self, headline: str, project_id: int, user_id: int,
+                               date: Optional[str] = None, **kwargs) -> Any:
+        """Create a milestone.
+
+        Leantime has no dedicated addMilestone RPC; milestones are tickets of
+        type "milestone", so this routes through addTicket with type set.
+
+        Args:
+            headline: Milestone title
+            project_id: Project the milestone belongs to
+            user_id: Author user ID
+            date: Creation date (YYYY-MM-DD). Defaults to today.
+            **kwargs: Extra ticket fields (editFrom, editTo, tags, description,
+                headline color, etc.)
+        """
+        from datetime import datetime
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+        values = {
+            "headline": headline,
+            "type": "milestone",
+            "projectId": project_id,
+            "userId": user_id,
+            "date": date,
+            **kwargs,
+        }
+        return await self.call(
+            "leantime.rpc.Tickets.Tickets.addTicket", {"values": values}
+        )
+
+    async def get_ticket_types(self) -> Any:
+        """Get available ticket types (task, story, bug, etc.)."""
+        return await self.call("leantime.rpc.Tickets.Tickets.getTicketTypes")
+
+    async def get_priority_labels(self) -> Any:
+        """Get available priority IDs mapped to their labels."""
+        return await self.call("leantime.rpc.Tickets.Tickets.getPriorityLabels")
     
     async def get_status_labels(self) -> dict:
         """Get all available ticket status labels with their IDs.
@@ -213,6 +306,23 @@ class LeantimeClient:
             "entityId": module_id
         }
         return await self.call("leantime.rpc.Comments.getComments", params)
+
+    async def edit_comment(self, comment_id: int, comment: str) -> Any:
+        """Edit the text of an existing comment.
+
+        Mirrors add_comment's convention: the text is passed inside a
+        ``values`` array as "text".
+        """
+        params = {"values": {"text": comment}, "id": comment_id}
+        return await self.call("leantime.rpc.Comments.editComment", params)
+
+    async def delete_comment(self, comment_id: int) -> Any:
+        """Delete a comment by ID."""
+        # Leantime's Comments.deleteComment expects the parameter named
+        # "commentId" (not "id").
+        return await self.call(
+            "leantime.rpc.Comments.deleteComment", {"commentId": comment_id}
+        )
     
     async def add_timesheet(self, user_id: int, ticket_id: int, hours: float, date: str, **kwargs) -> dict:
         """Add a timesheet entry."""
@@ -233,6 +343,14 @@ class LeantimeClient:
         if user_id:
             params["userId"] = user_id
         return await self.call("leantime.rpc.Timesheets.getTimesheets", params)
+
+    async def delete_timesheet(self, timesheet_id: int) -> Any:
+        """Delete a timesheet entry by ID.
+
+        Note: Leantime exposes no updateTime RPC; to correct an entry, delete
+        it and add a new one.
+        """
+        return await self.call("leantime.rpc.Timesheets.deleteTime", {"id": timesheet_id})
     
     async def get_all_subtasks(self, ticket_id: int) -> list:
         """Get all subtasks for a ticket.
