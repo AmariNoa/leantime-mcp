@@ -188,18 +188,24 @@ class LeantimeClient:
     
     async def add_comment(self, module: str, module_id: int, comment: str) -> dict:
         """Add a comment to a module (e.g., ticket, project)."""
+        # Leantime's Comments.addComment signature is
+        # addComment($values, $module, $entityId, $entity = null); the comment
+        # text is passed inside the $values array as "text", and the entity id
+        # parameter is named "entityId" (not "moduleId").
         params = {
+            "values": {"text": comment},
             "module": module,
-            "moduleId": module_id,
-            "comment": comment
+            "entityId": module_id
         }
         return await self.call("leantime.rpc.Comments.addComment", params)
-    
+
     async def get_comments(self, module: str, module_id: int) -> list:
         """Get comments for a module."""
+        # Leantime's Comments.getComments expects the entity id parameter to be
+        # named "entityId" (not "moduleId").
         params = {
             "module": module,
-            "moduleId": module_id
+            "entityId": module_id
         }
         return await self.call("leantime.rpc.Comments.getComments", params)
     
