@@ -6,7 +6,10 @@
 # Modified by AmariNoa: added tools for partial ticket updates (patch_ticket,
 # set_ticket_status, assign_ticket), deletion (delete_ticket, delete_comment,
 # delete_timesheet), milestones, project update/membership, comment editing,
-# and assorted read helpers.
+# and assorted read helpers. Added LEANTIME_ACTOR_USER_ID to pin the acting
+# user (the API key's owner) for whoami / my-tickets instead of resolving a
+# possibly-mismatched LEANTIME_USER_EMAIL, and redacted credential/session
+# fields from user responses.
 
 """Leantime MCP Server - Main server implementation."""
 
@@ -43,30 +46,77 @@ def get_client() -> LeantimeClient:
         # Get configuration from environment
         leantime_url = os.getenv("LEANTIME_URL")
         leantime_api_key = os.getenv("LEANTIME_API_KEY")
+        leantime_actor_user_id = os.getenv("LEANTIME_ACTOR_USER_ID")
         leantime_user_email = os.getenv("LEANTIME_USER_EMAIL")
-        
+
         if not leantime_url:
             raise ValueError(
                 "LEANTIME_URL environment variable is required. "
                 "Please set it in your .env file or environment."
             )
-        
+
         if not leantime_api_key:
             raise ValueError(
                 "LEANTIME_API_KEY environment variable is required. "
                 "Please set it in your .env file or environment."
             )
-        
-        if not leantime_user_email:
+
+        # Identity for read-side defaults (whoami / "my tickets"). Prefer the
+        # explicit numeric LEANTIME_ACTOR_USER_ID — it should be the user that
+        # OWNS the API key, so the acting identity is internally consistent.
+        # LEANTIME_USER_EMAIL is the legacy fallback; it resolves via a user
+        # lookup that may land on a DIFFERENT user than the token owner (e.g. a
+        # human admin), which is exactly the mix-up ACTOR_USER_ID avoids.
+        if not leantime_actor_user_id and not leantime_user_email:
             raise ValueError(
-                "LEANTIME_USER_EMAIL environment variable is required. "
-                "Please set it in your .env file or environment."
+                "Set LEANTIME_ACTOR_USER_ID (recommended: the user ID that owns "
+                "the API key) or LEANTIME_USER_EMAIL. One is required to resolve "
+                "the acting user for whoami / my-tickets."
             )
-        
+
         leantime_client = LeantimeClient(leantime_url, leantime_api_key)
         logger.info(f"Initialized Leantime client for {leantime_url}")
     
     return leantime_client
+
+
+async def _acting_user_id(client: LeantimeClient) -> int:
+    """Resolve the acting user ID for read-side defaults.
+
+    Prefers the explicit numeric LEANTIME_ACTOR_USER_ID (which should be the
+    owner of the API key). Falls back to resolving LEANTIME_USER_EMAIL via a
+    user lookup. Raises ValueError if neither yields an ID.
+    """
+    actor = os.getenv("LEANTIME_ACTOR_USER_ID")
+    if actor:
+        try:
+            return int(actor)
+        except ValueError as exc:
+            raise ValueError(
+                f"LEANTIME_ACTOR_USER_ID must be an integer, got {actor!r}"
+            ) from exc
+    email = os.getenv("LEANTIME_USER_EMAIL")
+    me = await client.get_user_by_email(email)
+    user_id = me.get("id") if isinstance(me, dict) else None
+    if user_id is None:
+        raise ValueError(f"Could not resolve user_id for {email}")
+    return int(user_id)
+
+
+# Sensitive user fields never worth returning over MCP.
+_USER_SECRET_FIELDS = (
+    "password", "twoFASecret", "session", "sessiontime",
+    "pwReset", "pwResetExpiration", "pwResetCount",
+)
+
+
+def _redact_user(user: Any) -> Any:
+    """Strip credential/session fields from a user dict (or list of them)."""
+    if isinstance(user, list):
+        return [_redact_user(u) for u in user]
+    if isinstance(user, dict):
+        return {k: v for k, v in user.items() if k not in _USER_SECRET_FIELDS}
+    return user
 
 
 # Tool functions will be defined below
@@ -161,7 +211,7 @@ async def get_user(user_id: int) -> str:
     """Get details of a specific user by ID."""
     client = get_client()
     result = await client.get_user(user_id)
-    return json.dumps(result, indent=2)
+    return json.dumps(_redact_user(result), indent=2)
 
 
 @app.tool()
@@ -169,7 +219,7 @@ async def list_users() -> str:
     """List all users."""
     client = get_client()
     result = await client.list_users()
-    return json.dumps(result, indent=2)
+    return json.dumps(_redact_user(result), indent=2)
 
 
 @app.tool()
@@ -312,20 +362,16 @@ async def delete_ticket(ticket_id: int) -> str:
 async def list_my_tickets(project_id: int, user_id: int = None) -> str:
     """List a user's open (not-done) tickets in a project.
 
-    Pass user_id explicitly for reliable results. If omitted, it falls back to
-    the user mapped to LEANTIME_USER_EMAIL, which may NOT be the API token's
-    acting user (e.g. the token may act as a dedicated agent account while the
-    configured email belongs to a human admin).
+    If user_id is omitted, defaults to the acting user: LEANTIME_ACTOR_USER_ID
+    if set (recommended — the API key's owner), otherwise the user mapped to
+    LEANTIME_USER_EMAIL. Pass user_id explicitly to query someone else.
     """
     client = get_client()
     if user_id is None:
-        email = os.getenv("LEANTIME_USER_EMAIL")
-        me = await client.get_user_by_email(email)
-        user_id = me.get("id") if isinstance(me, dict) else None
-        if user_id is None:
-            return json.dumps(
-                {"error": f"Could not resolve user_id for {email}"}, indent=2
-            )
+        try:
+            user_id = await _acting_user_id(client)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)}, indent=2)
     result = await client.get_open_user_tickets(user_id=user_id, project_id=project_id)
     return json.dumps(result, indent=2)
 
@@ -422,11 +468,18 @@ async def get_priority_labels() -> str:
 
 @app.tool()
 async def get_current_user() -> str:
-    """Get the acting user (resolved from the configured LEANTIME_USER_EMAIL)."""
+    """Get the acting user.
+
+    Resolved from LEANTIME_ACTOR_USER_ID if set (recommended — the API key's
+    owner), otherwise from LEANTIME_USER_EMAIL.
+    """
     client = get_client()
-    email = os.getenv("LEANTIME_USER_EMAIL")
-    result = await client.get_user_by_email(email)
-    return json.dumps(result, indent=2)
+    try:
+        user_id = await _acting_user_id(client)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)}, indent=2)
+    result = await client.get_user(user_id)
+    return json.dumps(_redact_user(result), indent=2)
 
 
 def main():

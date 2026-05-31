@@ -38,7 +38,7 @@ For local MCP clients like Claude Desktop that communicate via standard input/ou
       "env": {
         "LEANTIME_URL": "https://your-leantime-instance.com",
         "LEANTIME_API_KEY": "your_api_key_here",
-        "LEANTIME_USER_EMAIL": "your_email@example.com"
+        "LEANTIME_ACTOR_USER_ID": "7"
       }
     }
   }
@@ -60,7 +60,18 @@ For remote HTTP connections, first start the server with HTTP transport (see [Ru
 }
 ```
 
-**Note:** The HTTP transport configuration depends on your MCP client's support for HTTP connections. The server must be running separately using the `fastmcp run` command with `--transport http` option. Make sure to set the required environment variables (`LEANTIME_URL`, `LEANTIME_API_KEY`, `LEANTIME_USER_EMAIL`) when starting the HTTP server.
+**Note:** The HTTP transport configuration depends on your MCP client's support for HTTP connections. The server must be running separately using the `fastmcp run` command with `--transport http` option. Make sure to set the required environment variables (`LEANTIME_URL`, `LEANTIME_API_KEY`, and one of `LEANTIME_ACTOR_USER_ID` / `LEANTIME_USER_EMAIL`) when starting the HTTP server.
+
+### Acting user (`LEANTIME_ACTOR_USER_ID` vs `LEANTIME_USER_EMAIL`)
+
+The API key always determines **who authored** what the agent writes — that is the key's owning user and cannot be overridden per call. Separately, `get_current_user` and `list_my_tickets` need to know "who am I" for their defaults. Set **one** of:
+
+- `LEANTIME_ACTOR_USER_ID` (recommended) — the numeric user ID that owns the API key. Keeps the acting identity consistent with the token owner.
+- `LEANTIME_USER_EMAIL` (legacy fallback) — resolved to a user via lookup. This may resolve to a **different** user than the token owner (e.g. a human admin), causing confusing "my tickets" / whoami results.
+
+If both are set, `LEANTIME_ACTOR_USER_ID` wins. Credential and session fields are stripped from user responses.
+
+> **Per-user deployment:** generating a Leantime API key auto-creates a bot user (`source=api`, Editor role) that owns the key. For each person, issue a dedicated key and set `LEANTIME_API_KEY` + `LEANTIME_ACTOR_USER_ID` to that bot's user ID — each config is then internally consistent. To find a freshly created bot's ID, create a ticket with the new key and read back the ticket's `userId`.
 
 ## Getting a Leantime API Key
 
@@ -128,7 +139,10 @@ Set these environment variables for all transport types:
 ```bash
 export LEANTIME_URL="https://your-leantime-instance.com"
 export LEANTIME_API_KEY="your_api_key_here"
-export LEANTIME_USER_EMAIL="your_email@example.com"
+# Recommended: numeric user ID that owns the API key (see "Acting user" above).
+export LEANTIME_ACTOR_USER_ID="7"
+# Legacy fallback instead of the line above:
+# export LEANTIME_USER_EMAIL="your_email@example.com"
 ```
 
 ## Available Tools
@@ -178,7 +192,7 @@ The server provides the following MCP tools:
 **Users**
 - `get_user` - Get user details
 - `list_users` - List all users
-- `get_current_user` - Get the user mapped to `LEANTIME_USER_EMAIL`
+- `get_current_user` - Get the acting user (`LEANTIME_ACTOR_USER_ID`, or `LEANTIME_USER_EMAIL` fallback)
 
 
 ## Development
