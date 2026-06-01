@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC0-1.0
 
 # Leantime MCP Server
 
-> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. This fork also adds tools for partial ticket updates (`patch_ticket`), deletion (`delete_ticket`, `delete_comment`, `delete_timesheet`), milestones, project updates/membership, comment editing, and assorted read helpers. All original copyrights and the MIT license are retained.
+> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. This fork also adds tools for partial ticket updates (`patch_ticket`), deletion (`delete_ticket`, `delete_comment`, `delete_timesheet`), milestones, project updates/membership, comment editing, and assorted read helpers. Tool responses are now serialized with `ensure_ascii=False` so non-ASCII text (e.g. Japanese) is returned as real characters rather than `\uXXXX` escape sequences, which some local LLMs could not interpret. All original copyrights and the MIT license are retained.
 
 A Model Context Protocol (MCP) server that provides AI assistants with access to Leantime's (leantime.io) JsonRPC 2.0 API. This enables AI tools like Claude to interact with Leantime projects, tickets, timesheets, users, and more through a standardized interface.
 
@@ -213,6 +213,9 @@ uv sync
 
 # Run from source
 uv run leantime-mcp
+
+# Run the tests
+uv run --extra dev pytest
 ```
 
 ## Links

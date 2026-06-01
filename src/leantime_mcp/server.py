@@ -136,6 +136,18 @@ def _redact_user(user: Any) -> Any:
     return user
 
 
+def _json(obj: Any) -> str:
+    """Serialize a tool result to the JSON string returned over MCP.
+
+    ensure_ascii=False keeps non-ASCII text (e.g. Japanese) as real characters
+    rather than \\uXXXX escape sequences. Some local LLMs (e.g. via LM Studio)
+    fail to interpret the escaped form when it is handed back to them, so we
+    emit the decoded characters directly. The bytes still travel as valid
+    JSON/UTF-8 over the wire and round-trip intact.
+    """
+    return json.dumps(obj, indent=2, ensure_ascii=False)
+
+
 # Tool functions will be defined below
 
 
@@ -144,7 +156,7 @@ async def get_project(project_id: int) -> str:
     """Get details of a specific project by ID."""
     client = get_client()
     result = await client.get_project(project_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -152,7 +164,7 @@ async def list_projects() -> str:
     """List all projects accessible to the user."""
     client = get_client()
     result = await client.list_projects()
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -160,7 +172,7 @@ async def create_project(name: str, details: str = None, clientId: int = None) -
     """Create a new project."""
     client = get_client()
     result = await client.create_project(name=name, details=details, clientId=clientId)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -168,7 +180,7 @@ async def get_ticket(ticket_id: int) -> str:
     """Get details of a specific ticket by ID."""
     client = get_client()
     result = await client.get_ticket(ticket_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -176,7 +188,7 @@ async def list_tickets(project_id: int = None) -> str:
     """List tickets, optionally filtered by project ID."""
     client = get_client()
     result = await client.list_tickets(project_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -203,15 +215,15 @@ async def create_ticket(headline: str, project_id: int, user_id: int = None, dat
             client, assignedTo, assignee_email, use_env_default=True
         )
     except _UnknownEmailError as exc:
-        return json.dumps(
-            {"error": f"Could not resolve a user for {exc}"}, indent=2
+        return _json(
+            {"error": f"Could not resolve a user for {exc}"}
         )
     result = await client.create_ticket(
         headline=headline, project_id=project_id, user_id=user_id, date=date,
         description=description, status=status, priority=priority,
         assignedTo=assignedTo, tags=tags
     )
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -233,7 +245,7 @@ async def update_ticket(ticket_id: int, project_id: int, headline: str = None, d
         kwargs['assignedTo'] = assignedTo
     
     result = await client.update_ticket(ticket_id, project_id, **kwargs)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -241,7 +253,7 @@ async def get_status_labels() -> str:
     """Get available status labels."""
     client = get_client()
     result = await client.get_status_labels()
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -249,7 +261,7 @@ async def get_user(user_id: int) -> str:
     """Get details of a specific user by ID."""
     client = get_client()
     result = await client.get_user(user_id)
-    return json.dumps(_redact_user(result), indent=2)
+    return _json(_redact_user(result))
 
 
 @app.tool()
@@ -257,7 +269,7 @@ async def list_users() -> str:
     """List all users."""
     client = get_client()
     result = await client.list_users()
-    return json.dumps(_redact_user(result), indent=2)
+    return _json(_redact_user(result))
 
 
 @app.tool()
@@ -265,7 +277,7 @@ async def add_comment(module: str, module_id: int, comment: str) -> str:
     """Add a comment to a module (ticket, project, etc.)."""
     client = get_client()
     result = await client.add_comment(module=module, module_id=module_id, comment=comment)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -273,7 +285,7 @@ async def get_comments(module: str, module_id: int) -> str:
     """Get comments for a module (ticket, project, etc.)."""
     client = get_client()
     result = await client.get_comments(module=module, module_id=module_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -283,7 +295,7 @@ async def add_timesheet(user_id: int, ticket_id: int, hours: float, date: str, d
     result = await client.add_timesheet(
         user_id=user_id, ticket_id=ticket_id, hours=hours, date=date, description=description
     )
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -291,7 +303,7 @@ async def get_timesheets(project_id: int = None, user_id: int = None) -> str:
     """Get timesheets, optionally filtered by project or user."""
     client = get_client()
     result = await client.get_timesheets(project_id=project_id, user_id=user_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -299,7 +311,7 @@ async def get_all_subtasks(ticket_id: int) -> str:
     """Get all subtasks for a ticket."""
     client = get_client()
     result = await client.get_all_subtasks(ticket_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -313,7 +325,7 @@ async def upsert_subtask(parent_ticket: int, headline: str,
         date=date, description=description, status=status, priority=priority,
         assignedTo=assignedTo, tags=tags
     )
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 # Map friendly tool argument names to Leantime's actual ticket columns.
@@ -367,9 +379,9 @@ async def patch_ticket(ticket_id: int, status: int = None, headline: str = None,
     if fields:
         payload.update(fields)
     if not payload:
-        return json.dumps({"error": "No fields to update were provided."}, indent=2)
+        return _json({"error": "No fields to update were provided."})
     result = await client.patch_ticket(ticket_id, payload)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -377,7 +389,7 @@ async def set_ticket_status(ticket_id: int, status: int) -> str:
     """Change only a ticket's status (thin wrapper over patch_ticket)."""
     client = get_client()
     result = await client.patch_ticket(ticket_id, {"status": status})
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -394,15 +406,15 @@ async def assign_ticket(ticket_id: int, assigned_to: int = None,
             client, assigned_to, assignee_email, use_env_default=False
         )
     except _UnknownEmailError as exc:
-        return json.dumps(
-            {"error": f"Could not resolve a user for {exc}"}, indent=2
+        return _json(
+            {"error": f"Could not resolve a user for {exc}"}
         )
     if target is None:
-        return json.dumps(
-            {"error": "Provide assigned_to (id) or assignee_email."}, indent=2
+        return _json(
+            {"error": "Provide assigned_to (id) or assignee_email."}
         )
     result = await client.patch_ticket(ticket_id, {"editorId": target})
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -410,7 +422,7 @@ async def delete_ticket(ticket_id: int) -> str:
     """Delete a ticket by ID. This is irreversible."""
     client = get_client()
     result = await client.delete_ticket(ticket_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -425,9 +437,9 @@ async def list_my_tickets(project_id: int, user_id: int = None) -> str:
         try:
             user_id = await _acting_user_id(client)
         except ValueError as exc:
-            return json.dumps({"error": str(exc)}, indent=2)
+            return _json({"error": str(exc)})
     result = await client.get_open_user_tickets(user_id=user_id, project_id=project_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -435,7 +447,7 @@ async def list_milestones(project_id: int) -> str:
     """List milestones for a project."""
     client = get_client()
     result = await client.list_milestones(project_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -449,7 +461,7 @@ async def create_milestone(headline: str, project_id: int, user_id: int,
     result = await client.create_milestone(
         headline=headline, project_id=project_id, user_id=user_id, date=date, **extra
     )
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -457,7 +469,7 @@ async def edit_comment(comment_id: int, comment: str) -> str:
     """Edit the text of an existing comment."""
     client = get_client()
     result = await client.edit_comment(comment_id=comment_id, comment=comment)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -465,7 +477,7 @@ async def delete_comment(comment_id: int) -> str:
     """Delete a comment by ID."""
     client = get_client()
     result = await client.delete_comment(comment_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -483,9 +495,9 @@ async def update_project(project_id: int, name: str = None, details: str = None,
     if fields:
         payload.update(fields)
     if not payload:
-        return json.dumps({"error": "No fields to update were provided."}, indent=2)
+        return _json({"error": "No fields to update were provided."})
     result = await client.update_project(project_id, payload)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -493,7 +505,7 @@ async def list_project_users(project_id: int) -> str:
     """List the users assigned to a project."""
     client = get_client()
     result = await client.list_project_users(project_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -501,7 +513,7 @@ async def delete_timesheet(timesheet_id: int) -> str:
     """Delete a timesheet entry by ID. (Leantime has no update; delete + re-add.)"""
     client = get_client()
     result = await client.delete_timesheet(timesheet_id)
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -509,7 +521,7 @@ async def get_ticket_types() -> str:
     """Get the available ticket types (task, story, bug, etc.)."""
     client = get_client()
     result = await client.get_ticket_types()
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -517,7 +529,7 @@ async def get_priority_labels() -> str:
     """Get the available priority IDs mapped to their labels."""
     client = get_client()
     result = await client.get_priority_labels()
-    return json.dumps(result, indent=2)
+    return _json(result)
 
 
 @app.tool()
@@ -527,9 +539,9 @@ async def get_current_user() -> str:
     try:
         user_id = await _acting_user_id(client)
     except ValueError as exc:
-        return json.dumps({"error": str(exc)}, indent=2)
+        return _json({"error": str(exc)})
     result = await client.get_user(user_id)
-    return json.dumps(_redact_user(result), indent=2)
+    return _json(_redact_user(result))
 
 
 @app.tool()
@@ -543,16 +555,16 @@ async def get_target_user() -> str:
     client = get_client()
     email = os.getenv("LEANTIME_TARGET_USER_EMAIL")
     if not email:
-        return json.dumps(
-            {"error": "LEANTIME_TARGET_USER_EMAIL is not set."}, indent=2
+        return _json(
+            {"error": "LEANTIME_TARGET_USER_EMAIL is not set."}
         )
     user_id = await _target_user_id(client)
     if user_id is None:
-        return json.dumps(
-            {"error": f"Could not resolve a user for {email}"}, indent=2
+        return _json(
+            {"error": f"Could not resolve a user for {email}"}
         )
     result = await client.get_user(user_id)
-    return json.dumps(_redact_user(result), indent=2)
+    return _json(_redact_user(result))
 
 
 @app.tool()
@@ -566,11 +578,11 @@ async def resolve_user(email: str) -> str:
     client = get_client()
     user_id = await client.resolve_email_to_id(email)
     if user_id is None:
-        return json.dumps(
-            {"error": f"Could not resolve a user for {email}"}, indent=2
+        return _json(
+            {"error": f"Could not resolve a user for {email}"}
         )
     result = await client.get_user(user_id)
-    return json.dumps(_redact_user(result), indent=2)
+    return _json(_redact_user(result))
 
 
 def main():
