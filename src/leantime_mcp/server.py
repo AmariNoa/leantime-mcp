@@ -148,6 +148,60 @@ def _json(obj: Any) -> str:
     return json.dumps(obj, indent=2, ensure_ascii=False)
 
 
+# ---------------------------------------------------------------------------
+# Write-permission guard (Leantime role-based)
+#
+# Leantime roles: readonly=5, commenter=10, editor=20, manager=30, admin=40,
+# owner=50. Leantime's JSON-RPC API does NOT enforce role-based write
+# restrictions (a readonly user can still write via the API), so we enforce it
+# here: write/destructive tools run only if the acting user (the API key's
+# owner) has a role >= LEANTIME_WRITE_MIN_ROLE (default 20 = editor). Read tools
+# are never gated.
+# ---------------------------------------------------------------------------
+_acting_role: Optional[int] = None
+
+
+def _write_min_role() -> int:
+    """Minimum acting-user role required to perform writes (default 20 = editor)."""
+    raw = os.getenv("LEANTIME_WRITE_MIN_ROLE", "20")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 20
+
+
+async def _acting_user_role(client: LeantimeClient) -> int:
+    """Resolve and cache the acting user's Leantime role as an int (0 if unknown)."""
+    global _acting_role
+    if _acting_role is None:
+        uid = await client.whoami()
+        user = await client.get_user(uid)
+        raw = user.get("role") if isinstance(user, dict) else None
+        try:
+            _acting_role = int(raw)
+        except (TypeError, ValueError):
+            _acting_role = 0
+    return _acting_role
+
+
+async def _deny_if_readonly(client: LeantimeClient) -> Optional[str]:
+    """Return an error-JSON string if the acting user lacks write permission,
+    else None. Call at the start of every write/destructive tool."""
+    role = await _acting_user_role(client)
+    minimum = _write_min_role()
+    if role < minimum:
+        return _json({
+            "error": "permission_denied",
+            "message": (
+                f"Write denied: acting Leantime user role is {role}, but >= "
+                f"{minimum} is required. This MCP is read-only for this user."
+            ),
+            "acting_role": role,
+            "required_role": minimum,
+        })
+    return None
+
+
 # Tool functions will be defined below
 
 
@@ -171,6 +225,9 @@ async def list_projects() -> str:
 async def create_project(name: str, details: str = None, clientId: int = None) -> str:
     """Create a new project."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.create_project(name=name, details=details, clientId=clientId)
     return _json(result)
 
@@ -208,6 +265,9 @@ async def create_ticket(headline: str, project_id: int, user_id: int = None, dat
     user each time.
     """
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     if user_id is None:
         user_id = await _acting_user_id(client)
     try:
@@ -231,6 +291,9 @@ async def update_ticket(ticket_id: int, project_id: int, headline: str = None, d
                        status: int = None, priority: str = None, assignedTo: int = None) -> str:
     """Update an existing ticket."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     # Build kwargs from non-None parameters
     kwargs = {}
     if headline is not None:
@@ -276,6 +339,9 @@ async def list_users() -> str:
 async def add_comment(module: str, module_id: int, comment: str) -> str:
     """Add a comment to a module (ticket, project, etc.)."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.add_comment(module=module, module_id=module_id, comment=comment)
     return _json(result)
 
@@ -292,6 +358,9 @@ async def get_comments(module: str, module_id: int) -> str:
 async def add_timesheet(user_id: int, ticket_id: int, hours: float, date: str, description: str = None) -> str:
     """Add a timesheet entry."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.add_timesheet(
         user_id=user_id, ticket_id=ticket_id, hours=hours, date=date, description=description
     )
@@ -320,6 +389,9 @@ async def upsert_subtask(parent_ticket: int, headline: str,
                         priority: str = None, assignedTo: str = None, tags: str = None) -> str:
     """Create or update a subtask."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.upsert_subtask(
         parent_ticket_id=parent_ticket, headline=headline,
         date=date, description=description, status=status, priority=priority,
@@ -367,6 +439,9 @@ async def patch_ticket(ticket_id: int, status: int = None, headline: str = None,
             values, merged last (overrides the named args above).
     """
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     payload = {}
     named = {
         "status": status, "headline": headline, "description": description,
@@ -388,6 +463,9 @@ async def patch_ticket(ticket_id: int, status: int = None, headline: str = None,
 async def set_ticket_status(ticket_id: int, status: int) -> str:
     """Change only a ticket's status (thin wrapper over patch_ticket)."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.patch_ticket(ticket_id, {"status": status})
     return _json(result)
 
@@ -401,6 +479,9 @@ async def assign_ticket(ticket_id: int, assigned_to: int = None,
     are given, the email wins.
     """
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     try:
         target = await _resolve_assignee(
             client, assigned_to, assignee_email, use_env_default=False
@@ -421,6 +502,9 @@ async def assign_ticket(ticket_id: int, assigned_to: int = None,
 async def delete_ticket(ticket_id: int) -> str:
     """Delete a ticket by ID. This is irreversible."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.delete_ticket(ticket_id)
     return _json(result)
 
@@ -455,6 +539,9 @@ async def create_milestone(headline: str, project_id: int, user_id: int,
                            date: str = None, tags: str = None) -> str:
     """Create a milestone (a ticket of type 'milestone') in a project."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     extra = {}
     if tags is not None:
         extra["tags"] = tags
@@ -468,6 +555,9 @@ async def create_milestone(headline: str, project_id: int, user_id: int,
 async def edit_comment(comment_id: int, comment: str) -> str:
     """Edit the text of an existing comment."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.edit_comment(comment_id=comment_id, comment=comment)
     return _json(result)
 
@@ -476,6 +566,9 @@ async def edit_comment(comment_id: int, comment: str) -> str:
 async def delete_comment(comment_id: int) -> str:
     """Delete a comment by ID."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.delete_comment(comment_id)
     return _json(result)
 
@@ -485,6 +578,9 @@ async def update_project(project_id: int, name: str = None, details: str = None,
                          clientId: int = None, fields: dict = None) -> str:
     """Update an existing project's fields (only those provided are changed)."""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     payload = {}
     if name is not None:
         payload["name"] = name
@@ -512,6 +608,9 @@ async def list_project_users(project_id: int) -> str:
 async def delete_timesheet(timesheet_id: int) -> str:
     """Delete a timesheet entry by ID. (Leantime has no update; delete + re-add.)"""
     client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
     result = await client.delete_timesheet(timesheet_id)
     return _json(result)
 

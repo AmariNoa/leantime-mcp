@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC0-1.0
 
 # Leantime MCP Server
 
-> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. This fork also adds tools for partial ticket updates (`patch_ticket`), deletion (`delete_ticket`, `delete_comment`, `delete_timesheet`), milestones, project updates/membership, comment editing, and assorted read helpers. Tool responses are now serialized with `ensure_ascii=False` so non-ASCII text (e.g. Japanese) is returned as real characters rather than `\uXXXX` escape sequences, which some local LLMs could not interpret. All original copyrights and the MIT license are retained.
+> **Fork notice:** This is a fork of [daniel-eder/leantime-mcp](https://github.com/daniel-eder/leantime-mcp) (MIT). It adds a fix for the `add_comment` / `get_comments` tools, whose JSON-RPC parameters did not match Leantime's `Comments` service signatures and failed with `-32602 Invalid params`. The parameters are now sent as `entityId` (instead of `moduleId`) and the comment text as `values.text`. This fork also adds tools for partial ticket updates (`patch_ticket`), deletion (`delete_ticket`, `delete_comment`, `delete_timesheet`), milestones, project updates/membership, comment editing, and assorted read helpers. Tool responses are now serialized with `ensure_ascii=False` so non-ASCII text (e.g. Japanese) is returned as real characters rather than `\uXXXX` escape sequences, which some local LLMs could not interpret. It also adds a role-based write guard: write/destructive tools are gated by the acting user's Leantime role (`LEANTIME_WRITE_MIN_ROLE`, default editor=20), so an API key owned by a low-role user is effectively read-only — Leantime's API does not enforce this on its own (see [Write permissions](#write-permissions-read-only-enforcement)). All original copyrights and the MIT license are retained.
 
 A Model Context Protocol (MCP) server that provides AI assistants with access to Leantime's (leantime.io) JsonRPC 2.0 API. This enables AI tools like Claude to interact with Leantime projects, tickets, timesheets, users, and more through a standardized interface.
 
@@ -145,51 +145,83 @@ export LEANTIME_API_KEY="your_api_key_here"
 # Optional: email of the human operating the agent; used as the default
 # assignee for tickets the bot creates (see "Identity model" above).
 export LEANTIME_TARGET_USER_EMAIL="person-operating-the-agent@example.com"
+# Optional: minimum acting-user role required for write/destructive tools
+# (default 20 = editor). See "Write permissions" below.
+export LEANTIME_WRITE_MIN_ROLE="20"
 ```
+
+### Write permissions (read-only enforcement)
+
+Leantime's JSON-RPC API does **not** enforce role-based write restrictions — an
+authenticated key can write regardless of its user's role. To make
+LLM-driven access read-only safely, this server gates every **write/destructive**
+tool (`create_*`, `update_*`, `patch_ticket`, `set_ticket_status`,
+`assign_ticket`, `delete_*`, `upsert_subtask`, `add_comment`, `edit_comment`,
+`add_timesheet`, `create_milestone`) behind the acting user's Leantime role.
+**Read tools are never gated.**
+
+A write runs only if the acting user (the API key's owner, via whoami) has a
+role `>=` `LEANTIME_WRITE_MIN_ROLE`; otherwise the tool returns a
+`permission_denied` error without calling Leantime.
+
+| Role | Value |
+|------|-------|
+| readonly | 5 |
+| commenter | 10 |
+| editor | 20 |
+| manager | 30 |
+| admin | 40 |
+| owner | 50 |
+
+- Default is `20` (editor): a `readonly` (5) or `commenter` (10) bot is
+  effectively read-only.
+- To make a deployment read-only, issue an API key owned by a low-role user and
+  leave the default — no code change needed.
+- To allow all writes regardless of role, set `LEANTIME_WRITE_MIN_ROLE=0`.
 
 ## Available Tools
 
-The server provides the following MCP tools:
+The server provides the following MCP tools. Tools marked ✏️ perform **writes/deletes** and are gated by the acting user's Leantime role (`LEANTIME_WRITE_MIN_ROLE`, default `20`=editor — see [Write permissions](#write-permissions-read-only-enforcement)); all unmarked tools are read-only.
 
 **Projects**
 - `get_project` - Get details of a specific project
 - `list_projects` - List all accessible projects
-- `create_project` - Create a new project
-- `update_project` - Update an existing project (only the fields you pass)
+- `create_project` ✏️ - Create a new project
+- `update_project` ✏️ - Update an existing project (only the fields you pass)
 - `list_project_users` - List users assigned to a project
 
 **Tickets**
 - `get_ticket` - Get ticket/task details
 - `list_tickets` - List tickets (optionally filtered by project)
 - `list_my_tickets` - List a user's open tickets in a project
-- `create_ticket` - Create a new ticket
-- `update_ticket` - Update a ticket (full-save; blanks omitted fields)
-- `patch_ticket` - Partially update a ticket, changing ONLY the fields you pass (preferred)
-- `set_ticket_status` - Change only a ticket's status
-- `assign_ticket` - Assign a ticket to a user
-- `delete_ticket` - Delete a ticket
+- `create_ticket` ✏️ - Create a new ticket
+- `update_ticket` ✏️ - Update a ticket (full-save; blanks omitted fields)
+- `patch_ticket` ✏️ - Partially update a ticket, changing ONLY the fields you pass (preferred)
+- `set_ticket_status` ✏️ - Change only a ticket's status
+- `assign_ticket` ✏️ - Assign a ticket to a user
+- `delete_ticket` ✏️ - Delete a ticket
 - `get_status_labels` - Map status IDs to labels
 - `get_priority_labels` - Map priority IDs to labels
 - `get_ticket_types` - List available ticket types
 
 **Subtasks**
 - `get_all_subtasks` - List a ticket's subtasks
-- `upsert_subtask` - Create or update a subtask
+- `upsert_subtask` ✏️ - Create or update a subtask
 
 **Milestones**
 - `list_milestones` - List a project's milestones
-- `create_milestone` - Create a milestone
+- `create_milestone` ✏️ - Create a milestone
 
 **Comments**
-- `add_comment` - Add a comment to a ticket or project
+- `add_comment` ✏️ - Add a comment to a ticket or project
 - `get_comments` - Get comments for a module
-- `edit_comment` - Edit a comment's text
-- `delete_comment` - Delete a comment
+- `edit_comment` ✏️ - Edit a comment's text
+- `delete_comment` ✏️ - Delete a comment
 
 **Timesheets**
-- `add_timesheet` - Log time to a ticket
+- `add_timesheet` ✏️ - Log time to a ticket
 - `get_timesheets` - Query timesheet entries
-- `delete_timesheet` - Delete a timesheet entry (no update RPC; delete + re-add)
+- `delete_timesheet` ✏️ - Delete a timesheet entry (no update RPC; delete + re-add)
 
 **Users**
 - `get_user` - Get user details
