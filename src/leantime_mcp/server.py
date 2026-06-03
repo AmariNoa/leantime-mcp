@@ -47,6 +47,10 @@ def get_client() -> LeantimeClient:
         # Get configuration from environment
         leantime_url = os.getenv("LEANTIME_URL")
         leantime_api_key = os.getenv("LEANTIME_API_KEY")
+        # Personal Access Token: when set, the client authenticates as the
+        # token's human owner (Bearer) instead of the shared API-key bot.
+        # Requires the PersonalAccessTokenAuth plugin on the Leantime server.
+        leantime_pat = os.getenv("LEANTIME_PAT")
 
         if not leantime_url:
             raise ValueError(
@@ -54,14 +58,20 @@ def get_client() -> LeantimeClient:
                 "Please set it in your .env file or environment."
             )
 
-        if not leantime_api_key:
+        if not leantime_api_key and not leantime_pat:
             raise ValueError(
-                "LEANTIME_API_KEY environment variable is required. "
-                "Please set it in your .env file or environment."
+                "Either LEANTIME_API_KEY or LEANTIME_PAT must be set. "
+                "Use LEANTIME_API_KEY for the shared bot (e.g. LM Studio), or "
+                "LEANTIME_PAT to act as a specific human user."
             )
 
-        leantime_client = LeantimeClient(leantime_url, leantime_api_key)
-        logger.info(f"Initialized Leantime client for {leantime_url}")
+        leantime_client = LeantimeClient(leantime_url, leantime_api_key, leantime_pat)
+        auth_mode = (
+            "PAT (acts as the token's user)"
+            if leantime_pat
+            else "API key (acts as the key's bot user)"
+        )
+        logger.info(f"Initialized Leantime client for {leantime_url} [auth: {auth_mode}]")
 
     return leantime_client
 
@@ -200,6 +210,34 @@ async def _deny_if_readonly(client: LeantimeClient) -> Optional[str]:
             "required_role": minimum,
         })
     return None
+
+
+# ---------------------------------------------------------------------------
+# Attribution: when an AI agent operates this MCP, record which agent produced
+# the content. Driven solely by LEANTIME_AGENT_NAME and applied in BOTH auth
+# modes (API key and PAT). Currently only comments carry the trailer.
+# ---------------------------------------------------------------------------
+def _agent_name() -> Optional[str]:
+    """The operating AI agent's display name (LEANTIME_AGENT_NAME), or None."""
+    name = os.getenv("LEANTIME_AGENT_NAME")
+    name = name.strip() if name else ""
+    return name or None
+
+
+def _with_attribution(text: str) -> str:
+    """Append a ``Co-Authored-By: <agent>`` trailer to a comment if configured.
+
+    In PAT mode the human is the author, so this marks that an AI agent acted on
+    their behalf; in API-key mode it records which AI tool used the shared bot.
+    No-op when LEANTIME_AGENT_NAME is unset, or if the trailer is already present.
+    """
+    name = _agent_name()
+    if not name:
+        return text
+    trailer = f"Co-Authored-By: {name}"
+    if trailer in (text or ""):
+        return text
+    return f"{text}\n\n{trailer}"
 
 
 # Tool functions will be defined below
@@ -342,7 +380,9 @@ async def add_comment(module: str, module_id: int, comment: str) -> str:
     denied = await _deny_if_readonly(client)
     if denied:
         return denied
-    result = await client.add_comment(module=module, module_id=module_id, comment=comment)
+    result = await client.add_comment(
+        module=module, module_id=module_id, comment=_with_attribution(comment)
+    )
     return _json(result)
 
 

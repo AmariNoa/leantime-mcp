@@ -6,7 +6,10 @@
 # Modified by AmariNoa: corrected the Comments RPC parameter names
 # (entityId / values.text) so add_comment and get_comments match Leantime's
 # JSON-RPC method signatures. Added whoami (Auth.getUserId) and per-process
-# caches for the acting user and email->id lookups.
+# caches for the acting user and email->id lookups. Added dual authentication:
+# a company API key (X-API-KEY, acts as the key's "bot" user) or a Personal
+# Access Token (Authorization: Bearer, acts as the token's human owner). The
+# PAT path requires the PersonalAccessTokenAuth plugin on the Leantime server.
 
 """Leantime JSON-RPC 2.0 client implementation."""
 
@@ -30,15 +33,22 @@ class LeantimeAPIError(Exception):
 class LeantimeClient:
     """Client for interacting with Leantime's JSON-RPC 2.0 API."""
     
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: Optional[str] = None, pat: Optional[str] = None):
         """Initialize the Leantime client.
-        
+
         Args:
             base_url: Base URL of the Leantime instance (e.g., https://leantime.example.com)
-            api_key: API key for authentication
+            api_key: Company API key, sent as X-API-KEY. Authenticates as the key's
+                owner (typically a shared "bot" user). Used when no PAT is configured.
+            pat: Personal Access Token, sent as Authorization: Bearer. Authenticates
+                as the token's human owner (requires the PersonalAccessTokenAuth plugin
+                on the server). Takes precedence over api_key when both are set.
         """
+        if not api_key and not pat:
+            raise ValueError("Either api_key or pat must be provided.")
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
+        self.pat = pat
         self.endpoint = f"{self.base_url}/api/jsonrpc"
         self._request_id = 0
         # Per-process caches. The acting user (the API key's owner) never
@@ -73,11 +83,15 @@ class LeantimeClient:
             "id": self._get_next_id()
         }
         
-        headers = {
-            "Content-Type": "application/json",
-            "X-API-KEY": self.api_key
-        }
-        
+        # PAT takes precedence: send ONLY the Bearer token so the server
+        # authenticates as the token's human owner. Mixing X-API-KEY in would
+        # let the api guard win and act as the bot instead.
+        headers = {"Content-Type": "application/json"}
+        if self.pat:
+            headers["Authorization"] = f"Bearer {self.pat}"
+        else:
+            headers["X-API-KEY"] = self.api_key
+
         logger.debug(f"Calling Leantime RPC: {method} with params: {params}")
         
         async with httpx.AsyncClient() as client:
