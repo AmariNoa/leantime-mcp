@@ -724,6 +724,91 @@ async def resolve_user(email: str) -> str:
     return _json(_redact_user(result))
 
 
+# ---------------------------------------------------------------------------
+# Clients (the companies/organisations that own projects). create/update/delete
+# are role-gated like every other write tool. Recognised client columns: name
+# (required), street, zip, city, state, country, phone, internet (website),
+# email.
+# ---------------------------------------------------------------------------
+@app.tool()
+async def list_clients() -> str:
+    """List all clients (id, name, website, number of projects)."""
+    client = get_client()
+    result = await client.list_clients()
+    return _json(result)
+
+
+@app.tool(name="get_client")
+async def get_client_details(client_id: int) -> str:
+    """Get full details of a single client by ID (name, address, contact)."""
+    client = get_client()
+    result = await client.get_client(client_id)
+    return _json(result)
+
+
+@app.tool()
+async def create_client(name: str, street: str = None, zip: str = None,
+                        city: str = None, state: str = None, country: str = None,
+                        phone: str = None, internet: str = None,
+                        email: str = None) -> str:
+    """Create a new client (company).
+
+    Only ``name`` is required; ``internet`` is the website URL. Leantime rejects
+    an empty or duplicate name. Returns the new client's ID.
+    """
+    client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
+    result = await client.create_client(
+        name=name, street=street, zip=zip, city=city, state=state,
+        country=country, phone=phone, internet=internet, email=email,
+    )
+    return _json(result)
+
+
+@app.tool()
+async def update_client(client_id: int, name: str = None, street: str = None,
+                        zip: str = None, city: str = None, state: str = None,
+                        country: str = None, phone: str = None,
+                        internet: str = None, email: str = None) -> str:
+    """Update a client, changing ONLY the fields you pass.
+
+    Unspecified fields are preserved: the tool reads the current client and
+    merges your changes before saving (Leantime's client edit otherwise blanks
+    omitted fields). ``internet`` is the website URL.
+    """
+    client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
+    fields = {
+        "name": name, "street": street, "zip": zip, "city": city,
+        "state": state, "country": country, "phone": phone,
+        "internet": internet, "email": email,
+    }
+    fields = {key: value for key, value in fields.items() if value is not None}
+    if not fields:
+        return _json({"error": "No fields to update were provided."})
+    result = await client.update_client(client_id, fields)
+    return _json(result)
+
+
+@app.tool()
+async def delete_client(client_id: int) -> str:
+    """Delete a client by ID. This is IRREVERSIBLE.
+
+    WARNING: deleting a client also deletes ALL of its projects (and their
+    tickets) in Leantime. Double-check the client_id before calling.
+    """
+    client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
+    result = await client.delete_client(client_id)
+    return _json(result)
+
+
 def main():
     """Main entry point for the MCP server."""
     app.run()

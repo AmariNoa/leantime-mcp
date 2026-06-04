@@ -163,6 +163,67 @@ class LeantimeClient:
         return await self.call(
             "leantime.rpc.Projects.getUsersAssignedToProject", {"projectId": project_id}
         )
+
+    # --- Clients -------------------------------------------------------------
+
+    async def list_clients(self) -> list:
+        """List all clients (id, name, website, project count)."""
+        return await self.call("leantime.rpc.Clients.Clients.getAll")
+
+    async def get_client(self, client_id: int) -> dict:
+        """Get a single client's full details by ID."""
+        return await self.call(
+            "leantime.rpc.Clients.Clients.get", {"id": client_id}
+        )
+
+    async def create_client(self, name: str, **fields) -> Any:
+        """Create a new client and return its new id.
+
+        Maps to Leantime's ``Clients.create(array $values)`` (the validating
+        ``createClient`` wrapper is not exposed over JSON-RPC on this server, so
+        ``name`` is enforced at the tool layer instead). ``name`` is required;
+        recognised optional columns are street, zip, city, state, country,
+        phone, internet (website) and email. Unset (None) fields are dropped so
+        Leantime applies its own empty-string defaults.
+        """
+        values = {"name": name}
+        for key, value in fields.items():
+            if value is not None:
+                values[key] = value
+        return await self.call(
+            "leantime.rpc.Clients.Clients.create", {"values": values}
+        )
+
+    async def update_client(self, client_id: int, fields: dict) -> Any:
+        """Partially update a client, changing ONLY the fields you pass.
+
+        Leantime's ``Clients.editClient`` re-saves the whole client row and
+        blanks any column missing from ``values`` (there is no per-field patch
+        for clients). To get safe partial-update semantics we read the current
+        client, overlay the supplied fields, and send the merged record back.
+        """
+        current = await self.get_client(client_id)
+        if not isinstance(current, dict) or not current:
+            raise LeantimeAPIError(-32602, f"Client {client_id} not found")
+        # numberOfProjects is a computed read-only field; never write it back.
+        merged = {k: v for k, v in current.items() if k != "numberOfProjects"}
+        for key, value in fields.items():
+            if value is not None:
+                merged[key] = value
+        merged["id"] = client_id
+        return await self.call(
+            "leantime.rpc.Clients.Clients.editClient", {"values": merged}
+        )
+
+    async def delete_client(self, client_id: int) -> Any:
+        """Delete a client by ID.
+
+        WARNING: Leantime's ``Clients.delete`` also deletes every project (and
+        their tickets) belonging to the client. This is irreversible.
+        """
+        return await self.call(
+            "leantime.rpc.Clients.Clients.delete", {"id": client_id}
+        )
     
     async def get_ticket(self, ticket_id: int) -> dict:
         """Get ticket details by ID."""

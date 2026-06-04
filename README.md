@@ -190,6 +190,13 @@ The server provides the following MCP tools. Tools marked ✏️ perform **write
 - `update_project` ✏️ - Update an existing project (only the fields you pass)
 - `list_project_users` - List users assigned to a project
 
+**Clients**
+- `get_client` - Get a single client's full details (address, contact)
+- `list_clients` - List all clients
+- `create_client` ✏️ - Create a new client (only `name` is required)
+- `update_client` ✏️ - Update a client (only the fields you pass; others preserved)
+- `delete_client` ✏️ - Delete a client (⚠️ also deletes its projects — irreversible)
+
 **Tickets**
 - `get_ticket` - Get ticket/task details
 - `list_tickets` - List tickets (optionally filtered by project)
