@@ -128,11 +128,22 @@ class LeantimeClient:
         return await self.call("leantime.rpc.Projects.getAll")
     
     async def create_project(self, name: str, details: Optional[str] = None, **kwargs) -> dict:
-        """Create a new project."""
-        params = {"name": name, **kwargs}
-        if details:
-            params["details"] = details
-        return await self.call("leantime.rpc.Projects.addProject", params)
+        """Create a new project.
+
+        Leantime's ``leantime.rpc.Projects.addProject(array $values)`` expects a
+        single ``values`` param holding the project columns (matching the
+        ``editProject``/``addTicket`` convention). Sending the columns at the top
+        level makes the API return -32602 Invalid params, so we wrap them here.
+        Unset optional kwargs (e.g. ``clientId=None``) are dropped so we never
+        send nulls for fields Leantime treats as required.
+        """
+        values = {"name": name}
+        if details is not None:
+            values["details"] = details
+        for key, value in kwargs.items():
+            if value is not None:
+                values[key] = value
+        return await self.call("leantime.rpc.Projects.addProject", {"values": values})
 
     async def update_project(self, project_id: int, fields: dict) -> Any:
         """Update an existing project with the given fields.
