@@ -645,6 +645,25 @@ async def list_project_users(project_id: int) -> str:
 
 
 @app.tool()
+async def assign_user_to_project(user_id: int, project_id: int) -> str:
+    """Assign a user to a project (add them as a project member).
+
+    Idempotent: if the user is already a member, nothing changes. The user's
+    OTHER project assignments are preserved — Leantime stores assignments as the
+    user's full project set, so this reads the current set and adds this project
+    rather than replacing it. The new membership gets an empty project role;
+    existing roles are left untouched. Returns the resulting status and the
+    user's full list of assigned project IDs.
+    """
+    client = get_client()
+    denied = await _deny_if_readonly(client)
+    if denied:
+        return denied
+    result = await client.assign_user_to_project(user_id, project_id)
+    return _json(result)
+
+
+@app.tool()
 async def delete_timesheet(timesheet_id: int) -> str:
     """Delete a timesheet entry by ID. (Leantime has no update; delete + re-add.)"""
     client = get_client()

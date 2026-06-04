@@ -164,6 +164,59 @@ class LeantimeClient:
             "leantime.rpc.Projects.getUsersAssignedToProject", {"projectId": project_id}
         )
 
+    async def _user_project_ids(self, user_id: int) -> set:
+        """The set of project IDs the user currently has access to.
+
+        Uses ``getProjectsUserHasAccessTo`` — the same view of
+        zp_relationuserproject that ``editUserProjectRelations`` diffs against,
+        and which reflects relation changes immediately (unlike
+        ``isUserAssignedToProject``, which short-circuits to true for
+        admin/owner roles and can read stale cached project data). It is a
+        superset of explicit relations, so writing it back never deletes a
+        relation — it only ever adds.
+        """
+        current = await self.call(
+            "leantime.rpc.Projects.getProjectsUserHasAccessTo", {"userId": int(user_id)}
+        )
+        return {
+            int(p["id"]) for p in (current or [])
+            if isinstance(p, dict) and p.get("id") is not None
+        }
+
+    async def assign_user_to_project(self, user_id: int, project_id: int) -> dict:
+        """Assign a user to a project, preserving their other assignments.
+
+        Leantime only exposes ``editUserProjectRelations(id, projects)``, which
+        treats ``projects`` as the user's COMPLETE project set: it adds the new
+        ones and DELETES any current relation missing from the list. To add a
+        single project without dropping the rest, we read the user's current
+        projects, union in the target, and write the whole set back. The new
+        relation gets an empty project role; existing roles are left intact.
+        Idempotent: a no-op (no write) when the user already has the project.
+        """
+        user_id = int(user_id)
+        project_id = int(project_id)
+        current_ids = await self._user_project_ids(user_id)
+        if project_id in current_ids:
+            return {
+                "status": "already_assigned",
+                "userId": user_id,
+                "projectId": project_id,
+                "assignedProjects": sorted(current_ids),
+            }
+        target = sorted(current_ids | {project_id})
+        await self.call(
+            "leantime.rpc.Projects.editUserProjectRelations",
+            {"id": user_id, "projects": target},
+        )
+        new_ids = await self._user_project_ids(user_id)
+        return {
+            "status": "assigned" if project_id in new_ids else "write_not_reflected",
+            "userId": user_id,
+            "projectId": project_id,
+            "assignedProjects": sorted(new_ids),
+        }
+
     # --- Clients -------------------------------------------------------------
 
     async def list_clients(self) -> list:

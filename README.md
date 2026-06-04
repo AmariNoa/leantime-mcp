@@ -189,6 +189,7 @@ The server provides the following MCP tools. Tools marked ✏️ perform **write
 - `create_project` ✏️ - Create a new project
 - `update_project` ✏️ - Update an existing project (only the fields you pass)
 - `list_project_users` - List users assigned to a project
+- `assign_user_to_project` ✏️ - Add a user as a project member (keeps their other projects)
 
 **Clients**
 - `get_client` - Get a single client's full details (address, contact)
