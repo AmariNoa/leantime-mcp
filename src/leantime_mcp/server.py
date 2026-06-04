@@ -261,7 +261,16 @@ async def list_projects() -> str:
 
 @app.tool()
 async def create_project(name: str, details: str = None, clientId: int = None) -> str:
-    """Create a new project."""
+    """Create a new project.
+
+    Accepts ONLY ``name``, ``details`` and ``clientId`` — no other fields. To set
+    state, dates, budgets, etc. call ``update_project`` after creating.
+
+    ``clientId`` is optional in this signature but EFFECTIVELY REQUIRED: Leantime
+    rejects the call with a ``-32000`` server error when it is omitted. Always
+    pass a valid client id — look one up first with ``list_clients`` (a project
+    must belong to a client).
+    """
     client = get_client()
     denied = await _deny_if_readonly(client)
     if denied:
@@ -648,12 +657,16 @@ async def list_project_users(project_id: int) -> str:
 async def assign_user_to_project(user_id: int, project_id: int) -> str:
     """Assign a user to a project (add them as a project member).
 
+    Pass a SINGLE ``user_id`` and ``project_id`` per call — do NOT pass a list of
+    project ids. Leantime stores assignments as the user's full project set, but
+    this tool computes that union internally (read-merge-write), so you only name
+    the one project to add.
+
     Idempotent: if the user is already a member, nothing changes. The user's
-    OTHER project assignments are preserved — Leantime stores assignments as the
-    user's full project set, so this reads the current set and adds this project
-    rather than replacing it. The new membership gets an empty project role;
-    existing roles are left untouched. Returns the resulting status and the
-    user's full list of assigned project IDs.
+    OTHER project assignments are preserved — it reads the current set and adds
+    this project rather than replacing it. The new membership gets an empty
+    project role; existing roles are left untouched. Returns the resulting status
+    and the user's full list of assigned project IDs.
     """
     client = get_client()
     denied = await _deny_if_readonly(client)
