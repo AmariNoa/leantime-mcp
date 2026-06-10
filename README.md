@@ -45,6 +45,28 @@ For local MCP clients like Claude Desktop that communicate via standard input/ou
 }
 ```
 
+To authenticate as a specific human user instead of the shared API-key bot, use a Personal Access Token (`LEANTIME_PAT`) in place of `LEANTIME_API_KEY`. This requires the `PersonalAccessTokenAuth` plugin on the Leantime server, and when both are set `LEANTIME_PAT` takes precedence (see [Identity model](#identity-model-the-bot-vs-the-human-target)):
+
+```json
+{
+  "mcpServers": {
+    "leantime": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/AmariNoa/leantime-mcp.git",
+        "leantime-mcp"
+      ],
+      "env": {
+        "LEANTIME_URL": "https://your-leantime-instance.com",
+        "LEANTIME_PAT": "your_personal_access_token",
+        "LEANTIME_AGENT_NAME": "Claude"
+      }
+    }
+  }
+}
+```
+
 ### HTTP Transport
 
 For remote HTTP connections, first start the server with HTTP transport (see [Running the Server](#running-the-server)), then configure your MCP client to connect to the HTTP endpoint:
@@ -60,13 +82,15 @@ For remote HTTP connections, first start the server with HTTP transport (see [Ru
 }
 ```
 
-**Note:** The HTTP transport configuration depends on your MCP client's support for HTTP connections. The server must be running separately using the `fastmcp run` command with `--transport http` option. Make sure to set the required environment variables (`LEANTIME_URL`, `LEANTIME_API_KEY`, and optionally `LEANTIME_TARGET_USER_EMAIL`) when starting the HTTP server.
+**Note:** The HTTP transport configuration depends on your MCP client's support for HTTP connections. The server must be running separately using the `fastmcp run` command with `--transport http` option. Make sure to set the required environment variables (`LEANTIME_URL` plus either `LEANTIME_API_KEY` or `LEANTIME_PAT`, and optionally `LEANTIME_TARGET_USER_EMAIL`) when starting the HTTP server.
 
 ### Identity model: the bot vs. the human target
 
 There are two distinct identities, and **neither is configured as a user ID**:
 
-1. **The acting user (the bot).** Resolved server-side from the API key via whoami (`Auth.getUserId`) — no ID or email is configured for it. This is the user that **authored** everything the agent writes (the API key's owner) and the default for `get_current_user` / `list_my_tickets`. Its access scope is whatever the key's role and assigned projects allow, enforced by Leantime.
+1. **The acting user (the bot, or the PAT owner).** Resolved server-side via whoami (`Auth.getUserId`) — no ID or email is configured for it. This is the user that **authored** everything the agent writes and the default for `get_current_user` / `list_my_tickets`. Its access scope is whatever its role and assigned projects allow, enforced by Leantime. Two ways to authenticate, providing exactly one:
+   - `LEANTIME_API_KEY` — acts as the API key's bot user (a shared "bot" identity).
+   - `LEANTIME_PAT` — a Personal Access Token sent as `Authorization: Bearer`, acting as the token's **human owner** so writes are authored by that person. Requires the `PersonalAccessTokenAuth` plugin on the Leantime server. **Takes precedence** over `LEANTIME_API_KEY` when both are set.
 
 2. **The human target (optional).** `LEANTIME_TARGET_USER_EMAIL` is the email of the person operating the agent (their OIDC account). It is resolved to an ID via lookup — never set directly — and used as the **default assignee** for tickets the bot creates on that person's behalf. Inspect it with `get_target_user`. If unset, created tickets simply have no default assignee.
 
@@ -141,13 +165,29 @@ Set these environment variables for all transport types:
 
 ```bash
 export LEANTIME_URL="https://your-leantime-instance.com"
+
+# Authentication — provide ONE of the following two (PAT takes precedence):
+#
+#   LEANTIME_API_KEY: a Leantime API key. Authenticates as the key's bot user
+#   (the shared "bot" identity). Suitable for shared deployments (e.g. LM Studio).
 export LEANTIME_API_KEY="your_api_key_here"
+#
+#   LEANTIME_PAT: a Personal Access Token, sent as `Authorization: Bearer`.
+#   Authenticates as the token's human owner instead of a shared bot, so writes
+#   are authored by that person. Requires the PersonalAccessTokenAuth plugin on
+#   the Leantime server. When set, it takes precedence over LEANTIME_API_KEY.
+# export LEANTIME_PAT="your_personal_access_token"
+
 # Optional: email of the human operating the agent; used as the default
 # assignee for tickets the bot creates (see "Identity model" above).
 export LEANTIME_TARGET_USER_EMAIL="person-operating-the-agent@example.com"
 # Optional: minimum acting-user role required for write/destructive tools
 # (default 20 = editor). See "Write permissions" below.
 export LEANTIME_WRITE_MIN_ROLE="20"
+# Optional: display name of the operating AI agent. When set, a
+# `Co-Authored-By: <name>` trailer is appended to comments (in both auth
+# modes) to record which agent produced the content.
+# export LEANTIME_AGENT_NAME="Claude"
 ```
 
 ### Write permissions (read-only enforcement)
